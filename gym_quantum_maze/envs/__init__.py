@@ -1,0 +1,1 @@
+from gym_quantum_maze.envs.quantum_maze_env import QuantumMazeEnv
