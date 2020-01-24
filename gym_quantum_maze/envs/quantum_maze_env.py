@@ -52,7 +52,7 @@ class QuantumMazeEnv(gym.Env):
         self.actions_taken = None
         self.done = None
         self.reset()
-        self.viewer = None
+        self.figure = None
 
         # action definition:
         # 0 = no action; n=1,... reverse link changeable_links(n)
@@ -160,8 +160,17 @@ class QuantumMazeEnv(gym.Env):
         numpy.ndarray, AxesImage
             numpy array with rgb colors for each pixel, AxesImage obtained from pyplot.imshow() (when plotted)
         """
-
         img, ax = plot_maze_and_quantumState(self.maze, self.quantum_state, color_map=color_map)
+
+        # TODO: make the environment use a single figure. Possible code (not working)
+        # if self.figure is None:
+        #     self.figure = plt.figure()
+        #
+        # img, _ = plot_maze_and_quantumState(self.maze, self.quantum_state, color_map=color_map, show=False)
+        #
+        # plt.figure(self.figure.number)
+        # ax = plt.imshow(img)
+        # plt.show()
 
         return img, ax
 
