@@ -1,0 +1,5 @@
+gym_quantum_maze.egg-info/
+.idea/
+gym_quantum_maze/__pycache__/
+venv/
+gym_quantum_maze/envs/__pycache__/

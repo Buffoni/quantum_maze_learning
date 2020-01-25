@@ -21,6 +21,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from gym_quantum_maze.envs.quantum_tools import *
 import os
 
+
 class QuantumMazeEnv(gym.Env):
     metadata = {
         'render.modes': ['human', 'rgb_array'],
