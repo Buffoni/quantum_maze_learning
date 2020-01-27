@@ -69,7 +69,8 @@ class QuantumMazeEnv(gym.Env):
         return [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)] + \
                [func(density_matrix[m, n]) for m in range(3) for n in range(m + 1, 3)
                 for func in (lambda x: np.real(x), lambda x: np.imag(x))] + \
-               self.changeable_links + [self.actions_taken / self.total_actions]
+               [self.maze.get_link(link) for link in (self.changeable_links)] + \
+               [self.actions_taken / self.total_actions]
         # action_taken is normalized. Note that this definition has a list of mixed types
 
     @state.setter
