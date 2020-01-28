@@ -51,7 +51,6 @@ class QuantumMazeEnv(gym.Env):
         self.quantum_state = None
         self.maze = None
         self.actions_taken = None
-        self.done = None
         self.reset()
         self.figure = None
 
@@ -89,7 +88,6 @@ class QuantumMazeEnv(gym.Env):
         self.quantum_state = copy.deepcopy(self.initial_quantum_state)
         self.maze = copy.deepcopy(self.initial_maze)
         self.actions_taken = 0
-        self.done = False
         return self.state
 
     def do_action(self, action: int, _maze=None):
@@ -97,7 +95,8 @@ class QuantumMazeEnv(gym.Env):
         if _maze is None:
             _maze = self.maze
         if 1 <= action <= len(self.changeable_links):
-            _maze.reverse_link(self.changeable_links[int(action)])
+            _maze.reverse_link(self.changeable_links[int(action)-1]) # minus 1 to correctly index changeable_links.
+                                                                     # action==0 is no action
 
     def is_done(self):
         """Check whether the game is finished
@@ -141,9 +140,9 @@ class QuantumMazeEnv(gym.Env):
 
         self.state = (self.quantum_state, self.maze, self.actions_taken)
 
-        return self.state, reward, self.is_done, {}
+        return self.state, reward, self.is_done(), {}
 
-    def render(self, color_map='CMRmap_r'):
+    def render(self, show_nodes=False, show_links=False, show_ticks=False, color_map='CMRmap_r'):
         """Renders the environment.
 
         The set of supported modes varies per environment. (And some environments do not support rendering at all.)
@@ -154,6 +153,12 @@ class QuantumMazeEnv(gym.Env):
 
         Parameters
         ----------
+        show_nodes : bool (default False)
+            options to show the node number on the corresponding pixel in black
+        show_links : bool (default False)
+            options to show the link number on the corresponding pixel in red
+        show_ticks : bool (default False)
+            options to show the coordinate ticks in the plot
         color_map : matplotlib.colors
             palette used to color the quantum state in the maze
 
@@ -162,17 +167,20 @@ class QuantumMazeEnv(gym.Env):
         numpy.ndarray, AxesImage
             numpy array with rgb colors for each pixel, AxesImage obtained from pyplot.imshow() (when plotted)
         """
-        img, ax = plot_maze_and_quantumState(self.maze, self.quantum_state, color_map=color_map)
+        img, ax = plot_maze_and_quantumState(self.maze, self.quantum_state, show_nodes=show_nodes,
+                                             show_links=show_links, show_ticks=show_ticks, color_map=color_map)
 
         # TODO: make the environment use a single figure. Possible code (not working)
+        # TODO: manage figure closing (otherwise memory stays occupied)
         # if self.figure is None:
         #     self.figure = plt.figure()
-        #
-        # img, _ = plot_maze_and_quantumState(self.maze, self.quantum_state, color_map=color_map, show=False)
+        # img, _ = plot_maze_and_quantumState(self.maze, self.quantum_state, show_nodes=show_nodes,
+        #                                     show_links=show_links, show_ticks=show_ticks, color_map=color_map)
         #
         # plt.figure(self.figure.number)
         # ax = plt.imshow(img)
         # plt.show()
+        # TODO: show_nodes = True not working
 
         return img, ax
 
@@ -256,3 +264,4 @@ if __name__ == '__main__':
     env.render()
     #
     env.render_video(action_sequence=[1, 2, 3, 4], file_name=os.path.join(os.path.curdir, '..\..\quantum_maze_video'))
+    env.close()
