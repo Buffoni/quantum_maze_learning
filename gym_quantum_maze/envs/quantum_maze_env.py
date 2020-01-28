@@ -20,6 +20,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from gym_quantum_maze.envs.quantum_tools import *
 import os
+import pickle
 
 
 class QuantumMazeEnv(gym.Env):
@@ -29,13 +30,22 @@ class QuantumMazeEnv(gym.Env):
     }
 
     def __init__(self, maze_size=(10, 5), startNode=0, sinkerNode=None, p=0.1, sink_rate=1, time_samples=100,
-                 changeable_links=None, total_actions=8, done_threshold=0.95):
+                 changeable_links=None, total_actions=8, done_threshold=0.95, maze_filename=None):
         # evolution parameters
         self.time_samples = time_samples
         self.sink_rate = sink_rate
         self.p = p
 
-        self.initial_maze = Maze(maze_size=maze_size, startNode=startNode, sinkerNode=sinkerNode)
+        if maze_filename is None:
+            self.initial_maze = Maze(maze_size=maze_size, startNode=startNode, sinkerNode=sinkerNode)
+        else:
+            with open(''.join((maze_filename, '.pkl')), 'rb') as f:
+                self.initial_maze = pickle.load(f)
+            # overwrite startNode and sinkerNode
+            self.initial_maze.startNode = startNode
+            if sinkerNode is not None:
+                self.initial_maze.sinkerNode = sinkerNode
+
         self.quantum_system_size = self.initial_maze.total_nodes + 1  # +1 for the sink
         self.initial_quantum_state = ket2dm(basis(self.quantum_system_size, self.initial_maze.startNode))
 
@@ -68,7 +78,7 @@ class QuantumMazeEnv(gym.Env):
         return [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)] + \
                [func(density_matrix[m, n]) for m in range(3) for n in range(m + 1, 3)
                 for func in (lambda x: np.real(x), lambda x: np.imag(x))] + \
-               [self.maze.get_link(link) for link in (self.changeable_links)] + \
+               [self.maze.get_link(link) for link in self.changeable_links] + \
                [self.actions_taken / self.total_actions]
         # action_taken is normalized. Note that this definition has a list of mixed types
 
@@ -95,8 +105,9 @@ class QuantumMazeEnv(gym.Env):
         if _maze is None:
             _maze = self.maze
         if 1 <= action <= len(self.changeable_links):
-            _maze.reverse_link(self.changeable_links[int(action)-1]) # minus 1 to correctly index changeable_links.
-                                                                     # action==0 is no action
+            _maze.reverse_link(self.changeable_links[int(action) - 1])
+            # minus 1 to correctly index changeable_links.
+            # action==0 is no action
 
     def is_done(self):
         """Check whether the game is finished
@@ -253,7 +264,7 @@ class QuantumMazeEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = QuantumMazeEnv()
+    env = QuantumMazeEnv(time_samples=2000)
     env.reset()
     env.render()
     #
