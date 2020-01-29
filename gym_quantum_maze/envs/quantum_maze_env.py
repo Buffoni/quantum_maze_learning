@@ -15,6 +15,7 @@ import copy
 
 import gym
 from gym import spaces
+from gym import utils
 from matplotlib import animation
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
@@ -23,7 +24,7 @@ import os
 import pickle
 
 
-class QuantumMazeEnv(gym.Env):
+class QuantumMazeEnv(gym.Env, utils.EzPickle):
     metadata = {
         'render.modes': ['human', 'rgb_array'],
         'video.frames_per_second': 30
@@ -71,6 +72,10 @@ class QuantumMazeEnv(gym.Env):
         # observation_space definition: to define accordingly to the state definition
         self.observation_space = spaces.Box(shape=(self.quantum_system_size ** 2 + len(self.changeable_links) + 1,),
                                             low=0, high=1, dtype=np.float32)
+
+        # provides functionality to save/load via pickle
+        utils.EzPickle.__init__(self)
+
 
     @property
     def state(self):
