@@ -74,7 +74,10 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
                                             low=0, high=1, dtype=np.float32)
 
         # provides functionality to save/load via pickle
-        utils.EzPickle.__init__(self)
+        utils.EzPickle.__init__(self, maze_size, startNode, sinkerNode, p, sink_rate, time_samples, changeable_links,
+                                total_actions, done_threshold, maze_filename)
+        # TODO: not sure if it's the correct way to use EzPickle because 1) there is no documentation 2) only the
+        #  initial configuration is saved, for instance not the last state
 
 
     @property
