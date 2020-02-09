@@ -30,7 +30,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                          num_episodes=100, changeable_links=None,  # [4, 15, 30, 84],
                          batch_size=128, gamma=0.999, eps_start=0.9, eps_end=0.05,
                          eps_decay=3000, target_update=10, replay_capacity=10000):
-    """Function that performs the deep Q learning.
+    """Function that performs the deep Q learning to be called in parallel fashion.
 
     Reference: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
     """
@@ -100,10 +100,8 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     memory = ReplayMemory(replay_capacity)
 
     def select_action(state, steps_done):
-        # global steps_done
         sample = random.random()
         eps_threshold = eps_end + (eps_start - eps_end) * math.exp(-1. * steps_done / eps_decay)
-        steps_done += 1
         if sample > eps_threshold:
             with torch.no_grad():
                 return policy_net(state).max(1)[1].view(1, 1)
@@ -174,7 +172,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
         # Perform one step of the optimization (on the target network)
         optimize_model()
-        episode_transfer_to_sink.append(episode_reward)
+        episode_transfer_to_sink.append(episode_reward.to(device='cpu'))
 
         # tensorboardX log
         writer.add_scalar('data/episode_reward', episode_reward, i_episode)
@@ -217,7 +215,7 @@ def plot_durations(episode_transfer_to_sink, title='Training...'):
 if __name__ == '__main__':
     filename, elapsed = deep_Q_learning_maze(time_samples=500, num_episodes=10)
     print('Variables saved in', ''.join((filename, '.pkl')))
-    print('Trained model saved in', ''.join((filename, 'policy_net', '.pt')))
+    print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
     print("Elapsed time", elapsed, "sec.\n")
     with open(''.join((filename, '.pkl')), 'rb') as f:
         [episode_transfer_to_sink, env, steps_done] = pickle.load(f)

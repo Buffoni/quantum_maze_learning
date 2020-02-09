@@ -8,6 +8,8 @@ Maze class for quantum_maze_env
 import numpy as np
 import matplotlib.pyplot as plt
 from random import randrange, shuffle
+import pickle
+import datetime
 
 
 def generate_adjacency_matrix(w, h):
@@ -72,16 +74,34 @@ class Maze(object):
             assert self.maze_size == adjacency.shape
             self.adjacency = adjacency
 
-        self.startNode = startNode
-        if sinkerNode is None:
-            self.sinkerNode = self.width * self.height - 1
-        else:
-            self.sinkerNode = sinkerNode
-
         self.total_nodes = self.width * self.height
+        self.startNode = startNode
+        self.sinkerNode = sinkerNode
+
         self.vertical_links = (self.height - 1) * self.width
         self.horizontal_links = (self.width - 1) * self.height
         self.total_links = self.vertical_links + self.horizontal_links
+
+    @property
+    def startNode(self):
+        return self._startNode
+
+    @startNode.setter
+    def startNode(self, value):
+        assert 0 <= value < self.total_nodes, "startNode is outside the node range"
+        self._startNode = value
+
+    @property
+    def sinkerNode(self):
+        return self._sinkerNode
+
+    @sinkerNode.setter
+    def sinkerNode(self, value):
+        if value is None:
+            self._sinkerNode = self.width * self.height - 1
+        else:
+            assert 0 <= value < self.total_nodes, "sinkerNode is outside the node range"
+            self._sinkerNode = value
 
     def generate_maze_map(self):
         """Generate the maze map representing the maze as a pixel image from its adjacency matrix.
@@ -394,8 +414,58 @@ class Maze(object):
 
         return x, y
 
+    def save(self, filename=None):
+        """Save a maze.
+
+        Parameters
+        ----------
+        filename : str (default None)
+            name of the file where to save the maze. If None, use current date and time.
+
+        Returns
+        -------
+        str
+            Index representing the link, or numpy.nan if the parameters are invalid
+        """
+        if filename is None:
+            filename = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + '_maze'
+        if not filename.endswith('.pkl'):
+            filename += '.pkl'
+
+        with open(filename, 'wb') as f:
+            pickle.dump(self.__dict__, f)
+
+        return filename
+
+    def load(self, filename):
+        """Load a maze from a file.
+
+         Parameters
+        ----------
+        filename : str (default None)
+            name of the file where to save the maze. If None, use current date and time.
+        """
+
+        assert filename is not None, "filename parameter in Maze.load() is None"
+
+        if not filename.endswith('.pkl'):
+            filename += '.pkl'
+
+        with open(filename, 'rb') as f:
+            tmp_dict = pickle.load(f)
+
+        self.__dict__.update(tmp_dict)
+
+        return self
+
 
 if __name__ == "__main__":
     # maze_tools test
     myMaze = Maze(maze_size=(20, 10))
     myMaze.plot_maze(show_nodes=True, show_links=False)
+    myMaze.save('saving_test')
+    # myMaze = None
+    myMaze2 = Maze().load('saving_test')
+    myMaze2.plot_maze(show_nodes=True, show_links=False)
+    # comparison test between myMaze and myMaze2
+    np.all([np.all(myMaze.__dict__[x] == myMaze2.__dict__[x]) for x in myMaze.__dict__.keys()])

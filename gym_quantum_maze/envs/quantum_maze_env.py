@@ -40,8 +40,8 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
         if maze_filename is None:
             self.initial_maze = Maze(maze_size=maze_size, startNode=startNode, sinkerNode=sinkerNode)
         else:
-            with open(''.join((maze_filename, '.pkl')), 'rb') as f:
-                self.initial_maze = pickle.load(f)
+            self.initial_maze = Maze().load(maze_filename)
+
             # overwrite startNode and sinkerNode
             self.initial_maze.startNode = startNode
             if sinkerNode is not None:
