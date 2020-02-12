@@ -71,7 +71,7 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
 
         # observation_space definition: to define accordingly to the state definition
         self.observation_space = spaces.Box(shape=(self.quantum_system_size ** 2 + len(self.changeable_links) + 1,),
-                                            low=0, high=1, dtype=np.float32)
+                                            low=0, high=1, dtype=np.float64)
 
         # provides functionality to save/load via pickle
         utils.EzPickle.__init__(self, maze_size, startNode, sinkerNode, p, sink_rate, time_samples, changeable_links,
