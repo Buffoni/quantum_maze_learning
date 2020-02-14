@@ -129,7 +129,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
         batch = Transition(*zip(*transitions))
 
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                                batch.next_state)), device=device, dtype=torch.bool)
+                                                batch.next_state)), device=device, dtype=torch.uint8)
         non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
