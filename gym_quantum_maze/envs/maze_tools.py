@@ -88,8 +88,11 @@ class Maze(object):
 
     @startNode.setter
     def startNode(self, value):
-        assert 0 <= value < self.total_nodes, "startNode is outside the node range"
-        self._startNode = value
+        if value is None:
+            self._startNode = 0
+        else:
+            assert 0 <= value < self.total_nodes, "startNode is outside the node range"
+            self._startNode = value
 
     @property
     def sinkerNode(self):
@@ -460,6 +463,7 @@ class Maze(object):
 
 
 if __name__ == "__main__":
+    print('maze_tools has started')
     # maze_tools test
     myMaze = Maze(maze_size=(20, 10))
     myMaze.plot_maze(show_nodes=True, show_links=False)

@@ -185,6 +185,7 @@ def run_maze_save_dynamics(adjacency_matrix, initial_quantum_state, sinkerNode, 
 
 
 if __name__ == "__main__":
+    print('quantum_tools has started')
     myMaze = Maze(maze_size=(10, 5))
     quantum_system_size = myMaze.width * myMaze.height + 1
     myQuantumState = ket2dm(basis(quantum_system_size, myMaze.startNode))

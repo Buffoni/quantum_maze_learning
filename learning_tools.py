@@ -13,6 +13,7 @@ import random
 import time
 from collections import namedtuple
 from itertools import count
+import os
 
 import gym
 import matplotlib.pyplot as plt
@@ -24,6 +25,54 @@ import torch.optim as optim
 from tensorboardX import SummaryWriter
 
 from gym_quantum_maze.envs import quantum_maze_env
+
+# Replay Memory
+Transition = namedtuple('Transition',
+                        ('state', 'action', 'next_state', 'reward'))
+
+
+class ReplayMemory(object):
+
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.memory = []
+        self.position = 0
+
+    def push(self, *args):
+        """Saves a transition."""
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position] = Transition(*args)
+        self.position = (self.position + 1) % self.capacity
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
+
+
+# Neural Network
+class DQN(nn.Module):
+
+    def __init__(self, inputs, outputs, intermediates=None):
+        super(DQN, self).__init__()
+        if intermediates is None:
+            intermediates = [int(np.sqrt(inputs * outputs)), int(np.sqrt(outputs * np.sqrt(inputs * outputs)))]
+        if isinstance(intermediates, int):  # int to List conversion
+            intermediates = [intermediates]
+
+        intermediates.insert(0, inputs)
+        intermediates.append(outputs)
+        self.layers = nn.ModuleList()
+        for k in range(len(intermediates) - 1):
+            self.layers.append(nn.Linear(intermediates[k], intermediates[k + 1]))
+
+    def forward(self, x):
+        for single_layer in self.layers:
+            x = F.relu(single_layer(x))
+        return x
+
 
 
 def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_actions=4,
@@ -38,7 +87,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     codeName = 'deep_Q_learning_maze'
     today = datetime.datetime.now()
 
-    env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=0, sinkerNode=38,
+    env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=None, sinkerNode=None,
                    p=p, sink_rate=1, time_samples=time_samples, changeable_links=changeable_links,
                    total_actions=total_actions, done_threshold=0.95)
 
@@ -46,46 +95,8 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # tensorboardX writer
-    config_options = '_EP{0}_A{1}_T{2}_P{3:02.0f}'.format(num_episodes, total_actions, time_samples, 10*p)
+    config_options = '_EP{0}_A{1}_T{2}_P{3:02.0f}'.format(num_episodes, total_actions, time_samples, 10 * p)
     writer = SummaryWriter(comment=config_options)
-
-    # Replay Memory
-    Transition = namedtuple('Transition',
-                            ('state', 'action', 'next_state', 'reward'))
-
-    class ReplayMemory(object):
-
-        def __init__(self, capacity):
-            self.capacity = capacity
-            self.memory = []
-            self.position = 0
-
-        def push(self, *args):
-            """Saves a transition."""
-            if len(self.memory) < self.capacity:
-                self.memory.append(None)
-            self.memory[self.position] = Transition(*args)
-            self.position = (self.position + 1) % self.capacity
-
-        def sample(self, batch_size):
-            return random.sample(self.memory, batch_size)
-
-        def __len__(self):
-            return len(self.memory)
-
-    # Neural Network
-    class DQN(nn.Module):
-
-        def __init__(self, inputs, outputs):
-            super(DQN, self).__init__()
-            self.fc1 = nn.Linear(inputs, int(np.sqrt(inputs * outputs)))
-            self.fc2 = nn.Linear(int(np.sqrt(inputs * outputs)), int(np.sqrt(outputs * np.sqrt(inputs * outputs))))
-            self.fc3 = nn.Linear(int(np.sqrt(outputs * np.sqrt(inputs * outputs))), outputs)
-
-        def forward(self, x):
-            x = F.relu(self.fc1(x))
-            x = F.relu(self.fc2(x))
-            return self.fc3(x)
 
     # Get number of actions from gym action space
     n_actions = env.action_space.n
@@ -118,7 +129,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
         batch = Transition(*zip(*transitions))
 
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                                batch.next_state)), device=device, dtype=torch.uint8)
+                                                batch.next_state)), device=device, dtype=torch.bool)
         non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
@@ -182,20 +193,31 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             target_net.load_state_dict(policy_net.state_dict())
             # print('Completed episode', i_episode, 'of', num_episodes)
 
-    variables_to_save = [episode_transfer_to_sink, env, steps_done]
-
     # Save variables:
     filename = ''.join((today.strftime('%Y-%m-%d_%H-%M-%S_'), codeName, config_options))
-    with open(''.join((filename, '.pkl')), 'wb') as f:
-        pickle.dump(variables_to_save, f)
-
-    torch.save(policy_net.state_dict(), ''.join((filename, '_policy_net', '.pt')))
+    save_variables(os.path.join('simulations', filename),
+                   episode_transfer_to_sink, env, steps_done, policy_net)
 
     toc = time.time()
     elapsed = toc - tic
 
     return filename, elapsed
 
+
+def save_variables(filename=None, *args):
+    """ TODO: atm it saves only 1 net, solve to possible con with target_net, policy_net  """
+    if filename is None:
+        today = datetime.datetime.now()
+        filename = today.strftime('%Y-%m-%d_%H-%M-%S_')
+
+    with open(filename + '.pkl', 'wb') as f:
+        pickle.dump([x for x in args if not isinstance(x, DQN)], f)
+
+    for x in args:
+        if isinstance(x, DQN):
+            torch.save(x.state_dict(), filename + '_policy_net.pt')
+
+    return filename
 
 def plot_durations(episode_transfer_to_sink, title='Training...'):
     plt.figure()
@@ -212,11 +234,13 @@ def plot_durations(episode_transfer_to_sink, title='Training...'):
         plt.plot(means.numpy())
     plt.show()
 
+
 if __name__ == '__main__':
-    filename, elapsed = deep_Q_learning_maze(time_samples=500, num_episodes=10)
+    print('learning_tools has started')
+    filename, elapsed = deep_Q_learning_maze(time_samples=100, num_episodes=200)
     print('Variables saved in', ''.join((filename, '.pkl')))
     print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
     print("Elapsed time", elapsed, "sec.\n")
-    with open(''.join((filename, '.pkl')), 'rb') as f:
+    with open(os.path.join('simulations', filename +'.pkl' ), 'rb') as f:
         [episode_transfer_to_sink, env, steps_done] = pickle.load(f)
     plot_durations(episode_transfer_to_sink, title=''.join(('p=', str(env.p), ', T=', str(env.time_samples))))

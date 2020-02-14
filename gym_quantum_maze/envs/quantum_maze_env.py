@@ -43,7 +43,8 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
             self.initial_maze = Maze().load(maze_filename)
 
             # overwrite startNode and sinkerNode
-            self.initial_maze.startNode = startNode
+            if startNode is not None:
+                self.initial_maze.startNode = startNode
             if sinkerNode is not None:
                 self.initial_maze.sinkerNode = sinkerNode
 
@@ -272,6 +273,7 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
 
 
 if __name__ == '__main__':
+    print('quantum_maze_env has started')
     env = QuantumMazeEnv(time_samples=2000)
     env.reset()
     env.render()
