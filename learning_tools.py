@@ -196,7 +196,9 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     # Save variables:
     filename = ''.join((today.strftime('%Y-%m-%d_%H-%M-%S_'), codeName, config_options))
     save_variables(os.path.join('simulations', filename),
-                   episode_transfer_to_sink, env, steps_done, policy_net)
+                   episode_transfer_to_sink, env, steps_done, policy_net, maze_filename, p, time_samples, total_actions,
+                   num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
+                   replay_capacity)
 
     toc = time.time()
     elapsed = toc - tic
@@ -242,5 +244,7 @@ if __name__ == '__main__':
     print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
     print("Elapsed time", elapsed, "sec.\n")
     with open(os.path.join('simulations', filename +'.pkl' ), 'rb') as f:
-        [episode_transfer_to_sink, env, steps_done] = pickle.load(f)
+        [episode_transfer_to_sink, env, steps_done, maze_filename, p, time_samples, total_actions,
+         num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
+         replay_capacity] = pickle.load(f)
     plot_durations(episode_transfer_to_sink, title=''.join(('p=', str(env.p), ', T=', str(env.time_samples))))
