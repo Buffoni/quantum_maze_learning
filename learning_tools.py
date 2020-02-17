@@ -78,7 +78,7 @@ class DQN(nn.Module):
 def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_actions=4,
                          num_episodes=100, changeable_links=None,  # [4, 15, 30, 84],
                          batch_size=128, gamma=0.999, eps_start=0.9, eps_end=0.05,
-                         eps_decay=3000, target_update=10, replay_capacity=10000):
+                         eps_decay=3000, target_update=10, replay_capacity=10000, save_filename=None):
     """Function that performs the deep Q learning to be called in parallel fashion.
 
     Reference: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
@@ -194,8 +194,10 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             # print('Completed episode', i_episode, 'of', num_episodes)
 
     # Save variables:
-    filename = ''.join((today.strftime('%Y-%m-%d_%H-%M-%S_'), codeName, config_options))
-    save_variables(os.path.join('simulations', filename),
+    if save_filename is None:
+        save_filename = ''.join((today.strftime('%Y-%m-%d_%H-%M-%S_'), codeName, config_options))
+
+    save_variables(os.path.join('simulations', save_filename),
                    episode_transfer_to_sink, env, steps_done, policy_net, maze_filename, p, time_samples, total_actions,
                    num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
                    replay_capacity)
@@ -203,14 +205,14 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     toc = time.time()
     elapsed = toc - tic
 
-    return filename, elapsed
+    return save_filename, elapsed
 
 
 def save_variables(filename=None, *args):
     """ TODO: atm it saves only 1 net, solve to possible con with target_net, policy_net  """
     if filename is None:
         today = datetime.datetime.now()
-        filename = today.strftime('%Y-%m-%d_%H-%M-%S_')
+        filename = today.strftime('%Y-%m-%d_%H-%M-%S')
 
     with open(filename + '.pkl', 'wb') as f:
         pickle.dump([x for x in args if not isinstance(x, DQN)], f)
