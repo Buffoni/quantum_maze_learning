@@ -255,7 +255,7 @@ def save_variables(filename=None, *args):
         filename = today.strftime('%Y-%m-%d_%H-%M-%S')
 
     with open(filename + '.pkl', 'wb') as f:
-        pickle.dump([x for x in args if not isinstance(x, DQN)], f)
+        pickle.dump([x.to('cpu') if isinstance(x, torch.Tensor) else x for x in args if not isinstance(x, DQN)], f)
 
     for x in args:
         if isinstance(x, DQN):
@@ -290,7 +290,7 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=None
 
 if __name__ == '__main__':
     print('learning_tools has started')
-    filename, elapsed = deep_Q_learning_maze(time_samples=100, num_episodes=150)
+    filename, elapsed = deep_Q_learning_maze(time_samples=100, num_episodes=10)
     print('Variables saved in', ''.join((filename, '.pkl')))
     print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
     print("Elapsed time", elapsed, "sec.\n")
