@@ -94,9 +94,12 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     # if gpu is to be used
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # tensorboardX writer
     config_options = '_EP{0}_A{1}_T{2}_P{3:02.0f}'.format(num_episodes, total_actions, time_samples, 10 * p)
-    writer = SummaryWriter(comment=config_options)
+    if save_filename is None:
+        save_filename = ''.join((today.strftime('%Y-%m-%d_%H-%M-%S_'), codeName, config_options))
+
+    # tensorboardX writer
+    writer = SummaryWriter(os.path.join('tensorboardX', save_filename))
 
     # Get number of actions from gym action space
     n_actions = env.action_space.n
@@ -234,9 +237,6 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     reward_final, optimal_sequence = evaluate_sequence(None)
 
     # Save variables:
-    if save_filename is None:
-        save_filename = ''.join((today.strftime('%Y-%m-%d_%H-%M-%S_'), codeName, config_options))
-
     save_variables(os.path.join('simulations', save_filename),
                    episode_transfer_to_sink, env, steps_done, policy_net, maze_filename, p, time_samples, total_actions,
                    num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
