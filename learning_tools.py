@@ -110,12 +110,11 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     optimizer = optim.RMSprop(policy_net.parameters())
     memory = ReplayMemory(replay_capacity)
 
-    def select_action(state, steps_done):
+    def select_action(state, eps_threshold, net=policy_net):
         sample = random.random()
-        eps_threshold = eps_end + (eps_start - eps_end) * math.exp(-1. * steps_done / eps_decay)
         if sample > eps_threshold:
             with torch.no_grad():
-                return policy_net(state).max(1)[1].view(1, 1)
+                return net(state).max(1)[1].view(1, 1)
         else:
             return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
 
@@ -152,6 +151,43 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             param.grad.data.clamp_(-1, 1)
         optimizer.step()
 
+
+    def evaluate_sequence(sequence=None):
+        if sequence is None:
+            evaluate_optimal_sequence = True
+            sequence = [0]*total_actions
+        else:
+            evaluate_optimal_sequence = False
+
+        env.reset()
+        state = torch.tensor(env.state, device=device).unsqueeze(0)
+        episode_reward = 0
+        for t in count():
+            # Select and perform an action
+            if evaluate_optimal_sequence:
+                eps_threshold = -1
+                action = select_action(state, eps_threshold, target_net).item()
+                sequence[t] = action
+            else:
+                action = sequence[t]
+
+            next_state, reward, done, _ = env.step(action)
+            reward = torch.tensor([reward], device=device)
+            episode_reward = reward + gamma * episode_reward
+
+            if done:
+                next_state = None
+            else:
+                next_state = torch.tensor(next_state, device=device).unsqueeze(0)
+
+            # Move to the next state
+            state = next_state
+
+            if done:
+                break
+
+        return episode_reward, sequence
+
     # Training loop
     steps_done = 0
     for i_episode in range(num_episodes):
@@ -161,8 +197,9 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
         episode_reward = 0
         for t in count():
             # Select and perform an action
-            action = select_action(state, steps_done)
+            eps_threshold = eps_end + (eps_start - eps_end) * math.exp(-1. * steps_done / eps_decay)
             steps_done += 1
+            action = select_action(state, eps_threshold)
             next_state, reward, done, _ = env.step(action.item())
             reward = torch.tensor([reward], device=device)
             episode_reward = reward + gamma * episode_reward
@@ -193,6 +230,9 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             target_net.load_state_dict(policy_net.state_dict())
             # print('Completed episode', i_episode, 'of', num_episodes)
 
+    reward_no_actions, _ = evaluate_sequence([0]*total_actions)
+    reward_final, optimal_sequence = evaluate_sequence(None)
+
     # Save variables:
     if save_filename is None:
         save_filename = ''.join((today.strftime('%Y-%m-%d_%H-%M-%S_'), codeName, config_options))
@@ -200,7 +240,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     save_variables(os.path.join('simulations', save_filename),
                    episode_transfer_to_sink, env, steps_done, policy_net, maze_filename, p, time_samples, total_actions,
                    num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
-                   replay_capacity)
+                   replay_capacity, reward_no_actions, reward_final, optimal_sequence)
 
     toc = time.time()
     elapsed = toc - tic
@@ -223,7 +263,8 @@ def save_variables(filename=None, *args):
 
     return filename
 
-def plot_durations(episode_transfer_to_sink, title='Training...'):
+
+def plot_durations(episode_transfer_to_sink, title='Training...', constants=None, legend_labels=[]):
     plt.figure()
     plt.clf()
     transfer_to_sink_t = torch.tensor(episode_transfer_to_sink, dtype=torch.float)
@@ -231,22 +272,31 @@ def plot_durations(episode_transfer_to_sink, title='Training...'):
     plt.xlabel('Episode')
     plt.ylabel('Transfer to Sink')
     plt.plot(transfer_to_sink_t.numpy())
+
     # Take 100 episode averages and plot them too
     if len(transfer_to_sink_t) >= 100:
         means = transfer_to_sink_t.unfold(0, 100, 1).mean(1).view(-1)
         means = torch.cat((torch.zeros(99), means))
         plt.plot(means.numpy())
+        legend_labels = ['training', 'mean 100'] + legend_labels
+    else:
+        legend_labels = ['training'] + legend_labels
+    if constants is not None:
+        for k in constants:
+            plt.plot([k]*len(transfer_to_sink_t))
+    plt.legend(legend_labels)
     plt.show()
 
 
 if __name__ == '__main__':
     print('learning_tools has started')
-    filename, elapsed = deep_Q_learning_maze(time_samples=100, num_episodes=200)
+    filename, elapsed = deep_Q_learning_maze(time_samples=100, num_episodes=150)
     print('Variables saved in', ''.join((filename, '.pkl')))
     print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
     print("Elapsed time", elapsed, "sec.\n")
     with open(os.path.join('simulations', filename +'.pkl' ), 'rb') as f:
         [episode_transfer_to_sink, env, steps_done, maze_filename, p, time_samples, total_actions,
          num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
-         replay_capacity] = pickle.load(f)
-    plot_durations(episode_transfer_to_sink, title=''.join(('p=', str(env.p), ', T=', str(env.time_samples))))
+         replay_capacity, reward_no_actions, reward_final, optimal_sequence] = pickle.load(f)
+    plot_durations(episode_transfer_to_sink, title=''.join(('p=', str(env.p), ', T=', str(env.time_samples))),
+                   constants=[reward_no_actions, reward_final], legend_labels=['no action', 'final'])
