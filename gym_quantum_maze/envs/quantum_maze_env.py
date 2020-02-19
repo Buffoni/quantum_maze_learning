@@ -22,6 +22,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from gym_quantum_maze.envs.quantum_tools import *
 import os
 import pickle
+import copy
 
 
 class QuantumMazeEnv(gym.Env, utils.EzPickle):
@@ -237,7 +238,7 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
         div = make_axes_locatable(ax)
         cax = div.append_axes('right', '5%', '5%')
 
-        _maze = self.initial_maze
+        _maze = copy.deepcopy(self.initial_maze)
         quantum_state_sequence = [self.initial_quantum_state] + \
                                  run_maze_save_dynamics(_maze.adjacency, self.initial_quantum_state,
                                                         _maze.sinkerNode, self.p, self.time_samples,
