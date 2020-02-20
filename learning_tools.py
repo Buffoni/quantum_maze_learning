@@ -270,7 +270,7 @@ def save_variables(filename=None, *args):
 
 
 def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], legend_labels=[]):
-    plt.figure()
+    plt.figure(dpi=300)
     plt.clf()
     plt.title(title)
     plt.xlabel('Episode')
@@ -280,7 +280,7 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
     training_labels = not len(episode_transfer_to_sink) + len(constants) == len(legend_labels)
 
     for (i, transfer_to_sink) in enumerate(episode_transfer_to_sink):
-        transfer_to_sink_t = torch.tensor(transfer_to_sink, dtype=torch.float)
+        transfer_to_sink_t = torch.cat(transfer_to_sink) #torch.tensor(transfer_to_sink, dtype=torch.float)
         transfer_to_sink_len = len(transfer_to_sink_t)
         plt.plot(transfer_to_sink_t.numpy())
         # Take 100 episode averages and plot them too
