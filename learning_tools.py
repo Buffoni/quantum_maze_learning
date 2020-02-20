@@ -122,6 +122,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
 
     episode_transfer_to_sink = []
+    target_transfer_to_sink = []
 
     def optimize_model():
         if len(memory) < batch_size:
@@ -230,6 +231,10 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
         # Update the target network, copying all weights and biases in DQN
         if i_episode % target_update == 0:
+            reward_target, _ = evaluate_sequence(None)
+            reward_target = reward_target.to(device='cpu')
+            writer.add_scalar('data/target_reward', reward_target, i_episode)
+            target_transfer_to_sink.extend([reward_target]*target_update)
             target_net.load_state_dict(policy_net.state_dict())
             # print('Completed episode', i_episode, 'of', num_episodes)
 
@@ -240,7 +245,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     save_variables(os.path.join('simulations', save_filename),
                    episode_transfer_to_sink, env, steps_done, policy_net, maze_filename, p, time_samples, total_actions,
                    num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
-                   replay_capacity, reward_no_actions, reward_final, optimal_sequence)
+                   replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink)
 
     toc = time.time()
     elapsed = toc - tic
@@ -264,39 +269,59 @@ def save_variables(filename=None, *args):
     return filename
 
 
-def plot_durations(episode_transfer_to_sink, title='Training...', constants=None, legend_labels=[]):
+def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], legend_labels=[]):
     plt.figure()
     plt.clf()
-    transfer_to_sink_t = torch.tensor(episode_transfer_to_sink, dtype=torch.float)
     plt.title(title)
     plt.xlabel('Episode')
     plt.ylabel('Transfer to Sink')
-    plt.plot(transfer_to_sink_t.numpy())
 
-    # Take 100 episode averages and plot them too
-    if len(transfer_to_sink_t) >= 100:
-        means = transfer_to_sink_t.unfold(0, 100, 1).mean(1).view(-1)
-        means = torch.cat((torch.zeros(99), means))
-        plt.plot(means.numpy())
-        legend_labels = ['training', 'mean 100'] + legend_labels
-    else:
-        legend_labels = ['training'] + legend_labels
-    if constants is not None:
+    training_legend_labels = []
+    training_labels = not len(episode_transfer_to_sink) + len(constants) == len(legend_labels)
+
+    for (i, transfer_to_sink) in enumerate(episode_transfer_to_sink):
+        transfer_to_sink_t = torch.tensor(transfer_to_sink, dtype=torch.float)
+        transfer_to_sink_len = len(transfer_to_sink_t)
+        plt.plot(transfer_to_sink_t.numpy())
+        # Take 100 episode averages and plot them too
+        if transfer_to_sink_len >= 100:
+            means = transfer_to_sink_t.unfold(0, 100, 1).mean(1).view(-1)
+            means = torch.cat((torch.zeros(99), means))
+            plt.plot(means.numpy())
+            if training_labels:
+                training_legend_labels.extend(['training-' + str(i), 'mean 100-' + str(i)])
+            else:
+                training_legend_labels.append(legend_labels[i])
+                training_legend_labels.append(legend_labels[i] + ' mean 100')
+
+        else:
+            if training_labels:
+                training_legend_labels.extend(['training-' + str(i)])
+            else:
+                training_legend_labels.append(legend_labels[i])
+
+    if not constants == []:
         for k in constants:
-            plt.plot([k]*len(transfer_to_sink_t))
+            plt.plot([k]*transfer_to_sink_len)
+    if training_labels:
+        legend_labels = training_legend_labels + legend_labels
+    else:
+        legend_labels = training_legend_labels + legend_labels[len(episode_transfer_to_sink):]
+
     plt.legend(legend_labels)
     plt.show()
 
 
 if __name__ == '__main__':
     print('learning_tools has started')
-    filename, elapsed = deep_Q_learning_maze(time_samples=100, num_episodes=10)
+    filename, elapsed = deep_Q_learning_maze(time_samples=200, num_episodes=200)
     print('Variables saved in', ''.join((filename, '.pkl')))
     print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
     print("Elapsed time", elapsed, "sec.\n")
     with open(os.path.join('simulations', filename +'.pkl' ), 'rb') as f:
         [episode_transfer_to_sink, env, steps_done, maze_filename, p, time_samples, total_actions,
          num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
-         replay_capacity, reward_no_actions, reward_final, optimal_sequence] = pickle.load(f)
-    plot_durations(episode_transfer_to_sink, title=''.join(('p=', str(env.p), ', T=', str(env.time_samples))),
-                   constants=[reward_no_actions, reward_final], legend_labels=['no action', 'final'])
+         replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink] = pickle.load(f)
+    plot_durations([episode_transfer_to_sink, target_transfer_to_sink],
+                   title=''.join(('p=', str(env.p), ', T=', str(env.time_samples))),
+                   constants=[reward_no_actions, reward_final], legend_labels=['tranining', 'target', 'no action', 'final'])
