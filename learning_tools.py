@@ -156,19 +156,21 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
         optimizer.step()
 
 
-    def evaluate_sequence(sequence=None):
+    def evaluate_sequence_with_target_net(sequence=None):
+        """ If sequence is None, evaluates the best action with target_net
+        """
         if sequence is None:
-            evaluate_optimal_sequence = True
+            evaluate_optimal_action = True
             sequence = [0]*total_actions
         else:
-            evaluate_optimal_sequence = False
+            evaluate_optimal_action = False
 
         env.reset()
         state = torch.tensor(env.state, device=device).unsqueeze(0)
         episode_reward = 0
-        for t in count():
+        for t in range(total_actions):
             # Select and perform an action
-            if evaluate_optimal_sequence:
+            if evaluate_optimal_action:
                 eps_threshold = -1
                 action = select_action(state, eps_threshold, target_net).item()
                 sequence[t] = action
@@ -199,7 +201,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
         env.reset()
         state = torch.tensor(env.state, device=device).unsqueeze(0)
         episode_reward = 0
-        for t in count():
+        for t in range(total_actions):
             # Select and perform an action
             eps_threshold = eps_end + (eps_start - eps_end) * math.exp(-1. * steps_done / eps_decay)
             steps_done += 1
@@ -231,15 +233,15 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
         # Update the target network, copying all weights and biases in DQN
         if i_episode % target_update == 0:
-            reward_target, _ = evaluate_sequence(None)
+            reward_target, _ = evaluate_sequence_with_target_net(None)
             reward_target = reward_target.to(device='cpu')
             writer.add_scalar('data/target_reward', reward_target, i_episode)
             target_transfer_to_sink.extend([reward_target]*target_update)
             target_net.load_state_dict(policy_net.state_dict())
             # print('Completed episode', i_episode, 'of', num_episodes)
 
-    reward_no_actions, _ = evaluate_sequence([0]*total_actions)
-    reward_final, optimal_sequence = evaluate_sequence(None)
+    reward_no_actions, _ = evaluate_sequence_with_target_net([0]*total_actions)
+    reward_final, optimal_sequence = evaluate_sequence_with_target_net(None)
 
     # Save variables:
     save_variables(os.path.join('simulations', save_filename),

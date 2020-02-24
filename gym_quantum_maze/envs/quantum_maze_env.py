@@ -120,15 +120,22 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
             # action==0 is no action
 
     def is_done(self):
-        """Check whether the game is finished
+        # """Check whether the game is finished
+        #
+        #  Returns
+        # -------
+        # (bool)
+        #     True if the portions of quantum state in the sink is equal or above self.done_threshold, False otherwise
+        # """
+        # return np.real(self.quantum_state.full()[self.quantum_system_size - 1, self.quantum_system_size - 1]) >= \
+        #        self.done_threshold or self.actions_taken == self.total_actions
+        """Check whether the game is finished.
 
          Returns
         -------
         (bool)
-            True if the portions of quantum state in the sink is equal or above self.done_threshold, False otherwise
         """
-        return np.real(self.quantum_state.full()[self.quantum_system_size - 1, self.quantum_system_size - 1]) >= \
-               self.done_threshold or self.actions_taken == self.total_actions
+        return False
 
     def step(self, action: int):
         """Evaluate the transition to a new state and the reward from the current state with an action.
