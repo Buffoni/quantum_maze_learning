@@ -78,7 +78,8 @@ class DQN(nn.Module):
 def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_actions=4,
                          num_episodes=100, changeable_links=None,  # [4, 15, 30, 84],
                          batch_size=128, gamma=0.999, eps_start=0.9, eps_end=0.05,
-                         eps_decay=3000, target_update=10, replay_capacity=10000, save_filename=None):
+                         eps_decay=1000, target_update=10, replay_capacity=512,
+                         save_filename=None, enable_tensorboardX=True, enable_saving=True):
     """Function that performs the deep Q learning to be called in parallel fashion.
 
     Reference: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
@@ -95,11 +96,11 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     config_options = '_EP{0}_A{1}_T{2}_P{3:02.0f}'.format(num_episodes, total_actions, time_samples, 10 * p)
-    if save_filename is None:
+    if save_filename is None and enable_saving:
         save_filename = ''.join((today.strftime('%Y-%m-%d_%H-%M-%S_'), codeName, config_options))
 
-    # tensorboardX writer
-    writer = SummaryWriter(os.path.join('tensorboardX', save_filename))
+    if enable_tensorboardX:
+        writer = SummaryWriter(os.path.join('tensorboardX', save_filename)) # tensorboardX writer
 
     # Get number of actions from gym action space
     n_actions = env.action_space.n
@@ -228,14 +229,15 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
         optimize_model()
         episode_transfer_to_sink.append(episode_reward.to(device='cpu'))
 
-        # tensorboardX log
-        writer.add_scalar('data/episode_reward', episode_reward, i_episode)
+        if enable_tensorboardX:
+            writer.add_scalar('data/episode_reward', episode_reward, i_episode) # tensorboardX log
 
         # Update the target network, copying all weights and biases in DQN
         if i_episode % target_update == 0:
             reward_target, _ = evaluate_sequence_with_target_net(None)
             reward_target = reward_target.to(device='cpu')
-            writer.add_scalar('data/target_reward', reward_target, i_episode)
+            if enable_tensorboardX:
+                writer.add_scalar('data/target_reward', reward_target, i_episode)
             target_transfer_to_sink.extend([reward_target]*target_update)
             target_net.load_state_dict(policy_net.state_dict())
             # print('Completed episode', i_episode, 'of', num_episodes)
@@ -244,15 +246,16 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     reward_final, optimal_sequence = evaluate_sequence_with_target_net(None)
 
     # Save variables:
-    save_variables(os.path.join('simulations', save_filename),
-                   episode_transfer_to_sink, env, steps_done, policy_net, maze_filename, p, time_samples, total_actions,
-                   num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
-                   replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink)
+    if enable_saving:
+        save_variables(os.path.join('simulations', save_filename),
+                       episode_transfer_to_sink, env, steps_done, policy_net, maze_filename, p, time_samples, total_actions,
+                       num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
+                       replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink)
 
     toc = time.time()
     elapsed = toc - tic
 
-    return save_filename, elapsed
+    return save_filename, elapsed, reward_final, optimal_sequence
 
 
 def save_variables(filename=None, *args):
@@ -311,12 +314,13 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
         legend_labels = training_legend_labels + legend_labels[len(episode_transfer_to_sink):]
 
     plt.legend(legend_labels)
+    plt.ylim(0, 1)
     plt.show()
 
 
 if __name__ == '__main__':
     print('learning_tools has started')
-    filename, elapsed = deep_Q_learning_maze(time_samples=200, num_episodes=200)
+    filename, elapsed = deep_Q_learning_maze(maze_filename='maze-zigzag-4x4-1', time_samples=350, num_episodes=1000, p=0.5)
     print('Variables saved in', ''.join((filename, '.pkl')))
     print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
     print("Elapsed time", elapsed, "sec.\n")
