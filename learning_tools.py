@@ -174,7 +174,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             if evaluate_optimal_action:
                 eps_threshold = -1
                 action = select_action(state, eps_threshold, target_net).item()
-                sequence[t] = action.to(device='cpu')
+                sequence[t] = action
             else:
                 action = sequence[t]
 
