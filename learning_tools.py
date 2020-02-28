@@ -174,12 +174,12 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             if evaluate_optimal_action:
                 eps_threshold = -1
                 action = select_action(state, eps_threshold, target_net).item()
-                sequence[t] = action
+                sequence[t] = action.to(device='cpu')
             else:
                 action = sequence[t]
 
             next_state, reward, done, _ = env.step(action)
-            reward = torch.tensor([reward], device=device)
+            reward = reward.to(device='cpu') #torch.tensor([reward], device=device)
             episode_reward = reward + gamma * episode_reward
 
             if done:
@@ -193,7 +193,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             if done:
                 break
 
-        return episode_reward, sequence
+        return episode_reward.to(device='cpu'), sequence
 
     # Training loop
     steps_done = 0
@@ -230,12 +230,11 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
         episode_transfer_to_sink.append(episode_reward.to(device='cpu'))
 
         if enable_tensorboardX:
-            writer.add_scalar('data/episode_reward', episode_reward, i_episode) # tensorboardX log
+            writer.add_scalar('data/episode_reward', episode_reward.to(device='cpu'), i_episode) # tensorboardX log
 
         # Update the target network, copying all weights and biases in DQN
         if i_episode % target_update == 0:
             reward_target, _ = evaluate_sequence_with_target_net(None)
-            reward_target = reward_target.to(device='cpu')
             if enable_tensorboardX:
                 writer.add_scalar('data/target_reward', reward_target, i_episode)
             target_transfer_to_sink.extend([reward_target]*target_update)
