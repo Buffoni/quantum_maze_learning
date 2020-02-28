@@ -179,7 +179,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                 action = sequence[t]
 
             next_state, reward, done, _ = env.step(action)
-            reward = reward.to(device='cpu') #torch.tensor([reward], device=device)
+            # reward = reward.to(device='cpu') #torch.tensor([reward], device=device)
             episode_reward = reward + gamma * episode_reward
 
             if done:
@@ -193,7 +193,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             if done:
                 break
 
-        return episode_reward.to(device='cpu'), sequence
+        return episode_reward, sequence
 
     # Training loop
     steps_done = 0
