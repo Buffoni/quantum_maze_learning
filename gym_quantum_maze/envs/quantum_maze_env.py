@@ -55,7 +55,7 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
         if changeable_links is not None:
             self.changeable_links = changeable_links
         else:
-            self.changeable_links = np.arange(1, self.initial_maze.total_links).tolist()  # all links are changeable
+            self.changeable_links = np.arange(1, self.initial_maze.total_links + 1).tolist()  # all links are changeable
 
         self.total_actions = total_actions
         self.done_threshold = done_threshold
