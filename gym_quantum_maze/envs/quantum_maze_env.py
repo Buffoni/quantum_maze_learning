@@ -81,12 +81,12 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
         # TODO: not sure if it's the correct way to use EzPickle because 1) there is no documentation 2) only the
         #  initial configuration is saved, for instance not the last state
 
-
     @property
     def state(self):
         density_matrix = self.quantum_state.full()
         return [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)] + \
-               [func(density_matrix[m, n]) for m in range(3) for n in range(m + 1, 3)
+               [func(density_matrix[m, n]) for m in range(self.quantum_system_size)
+                for n in range(m + 1, self.quantum_system_size)
                 for func in (lambda x: np.real(x), lambda x: np.imag(x))] + \
                [self.maze.get_link(link) for link in self.changeable_links] + \
                [self.actions_taken / self.total_actions]
