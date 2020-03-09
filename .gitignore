@@ -3,3 +3,6 @@ gym_quantum_maze.egg-info/
 gym_quantum_maze/__pycache__/
 venv/
 gym_quantum_maze/envs/__pycache__/
+*.pt
+*.pkl
+runs

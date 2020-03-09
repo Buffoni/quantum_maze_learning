@@ -85,6 +85,7 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
     @property
     def state(self):
         density_matrix = self.quantum_state.full()
+        # TODO: change definitions of state and see how that affects the learning process
         return [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)] + \
                [func(density_matrix[m, n]) for m in range(3) for n in range(m + 1, 3)
                 for func in (lambda x: np.real(x), lambda x: np.imag(x))] + \
