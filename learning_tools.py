@@ -74,13 +74,14 @@ class DQN(nn.Module):
         return x
 
 
-
+# deep_Q_learning
 def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_actions=4,
                          num_episodes=100, changeable_links=None,  # [4, 15, 30, 84],
                          batch_size=128, gamma=0.999, eps_start=0.9, eps_end=0.05,
                          eps_decay=1000, target_update=10, replay_capacity=512,
-                         save_filename=None, enable_tensorboardX=True, enable_saving=True):
-    """Function that performs the deep Q learning to be called in parallel fashion.
+                         save_filename=None, enable_tensorboardX=True, enable_saving=True,
+                         startNode=None, sinkerNode=None, training_startNodes=None):
+    """Function that performs the deep Q learning.
 
     Reference: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
     """
@@ -88,9 +89,15 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     codeName = 'deep_Q_learning_maze'
     today = datetime.datetime.now()
 
-    env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=None, sinkerNode=None,
+    env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=startNode, sinkerNode=sinkerNode,
                    p=p, sink_rate=1, time_samples=time_samples, changeable_links=changeable_links,
                    total_actions=total_actions, done_threshold=0.95)
+    if startNode is None:
+        startNode = env.initial_maze.startNode
+    if sinkerNode is None:
+        sinkerNode = env.initial_maze.sinkerNode
+    if training_startNodes is None or training_startNodes == []:
+        training_startNodes = [startNode]
 
     # if gpu is to be used
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -100,7 +107,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
         save_filename = ''.join((today.strftime('%Y-%m-%d_%H-%M-%S_'), codeName, config_options))
 
     if enable_tensorboardX:
-        writer = SummaryWriter(os.path.join('tensorboardX', save_filename)) # tensorboardX writer
+        writer = SummaryWriter(os.path.join('tensorboardX', save_filename))  # tensorboardX writer
 
     # Get number of actions from gym action space
     n_actions = env.action_space.n
@@ -156,13 +163,12 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             param.grad.data.clamp_(-1, 1)
         optimizer.step()
 
-
     def evaluate_sequence_with_target_net(sequence=None):
         """ If sequence is None, evaluates the best action with target_net
         """
         if sequence is None:
             evaluate_optimal_action = True
-            sequence = [0]*total_actions
+            sequence = [0] * total_actions
         else:
             evaluate_optimal_action = False
 
@@ -198,56 +204,71 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     # Training loop
     steps_done = 0
     for i_episode in range(num_episodes):
-        # Initialize the environment and state
-        env.reset()
-        state = torch.tensor(env.state, device=device).unsqueeze(0)
-        episode_reward = 0
-        for t in range(total_actions):
-            # Select and perform an action
-            eps_threshold = eps_end + (eps_start - eps_end) * math.exp(-1. * steps_done / eps_decay)
-            steps_done += 1
-            action = select_action(state, eps_threshold)
-            next_state, reward, done, _ = env.step(action.item())
-            reward = torch.tensor([reward], device=device)
-            episode_reward = reward + gamma * episode_reward
+        episode_reward_startNode = [0] * len(training_startNodes)
+        for id_startNode, startNode_tmp in enumerate(training_startNodes):
+            # Initialize the environment and state
+            env.initial_maze.startNode = startNode_tmp
+            env.reset()
+            state = torch.tensor(env.state, device=device).unsqueeze(0)
+            episode_reward = 0
+            for t in range(total_actions):
+                # Select and perform an action
+                eps_threshold = eps_end + (eps_start - eps_end) * math.exp(-1. * steps_done / eps_decay)
+                steps_done += 1
+                action = select_action(state, eps_threshold)
+                next_state, reward, done, _ = env.step(action.item())
+                reward = torch.tensor([reward], device=device)
+                episode_reward = reward + gamma * episode_reward
 
-            if done:
-                next_state = None
-            else:
-                next_state = torch.tensor(next_state, device=device).unsqueeze(0)
+                if done:
+                    next_state = None
+                else:
+                    next_state = torch.tensor(next_state, device=device).unsqueeze(0)
 
-            # Store the transition in memory
-            memory.push(state, action, next_state, reward)
+                # Store the transition in memory
+                memory.push(state, action, next_state, reward)
 
-            # Move to the next state
-            state = next_state
+                # Move to the next state
+                state = next_state
 
-            if done:
-                break
+                if done:
+                    break
 
-        # Perform one step of the optimization (on the target network)
-        optimize_model()
-        episode_transfer_to_sink.append(episode_reward.to(device='cpu'))
+            # Perform one step of the optimization (on the target network)
+            optimize_model()
+            episode_reward_startNode[id_startNode] = episode_reward.to(device='cpu')
+            episode_transfer_to_sink.append(episode_reward_startNode[id_startNode])
 
         if enable_tensorboardX:
-            writer.add_scalar('data/episode_reward', episode_reward.to(device='cpu'), i_episode) # tensorboardX log
+            if len(training_startNodes) > 1:
+                writer.add_scalar('data/episode_average_reward',
+                                  sum(episode_reward_startNode) / len(episode_reward_startNode),
+                                  i_episode)  # tensorboardX log
+                for id_startNode, startNode_tmp in enumerate(training_startNodes):
+                    writer.add_scalar('data/episode_reward_startNode_{0:d}'.format(startNode_tmp),
+                                      episode_reward_startNode[id_startNode], i_episode)
+            else:
+                writer.add_scalar('data/episode_reward', episode_reward.to(device='cpu'), i_episode)  # tensorboardX log
 
         # Update the target network, copying all weights and biases in DQN
         if i_episode % target_update == 0:
+            env.initial_maze.startNode = startNode
             reward_target, _ = evaluate_sequence_with_target_net(None)
             if enable_tensorboardX:
                 writer.add_scalar('data/target_reward', reward_target, i_episode)
-            target_transfer_to_sink.extend([reward_target]*target_update)
+            target_transfer_to_sink.extend([reward_target] * target_update)
             target_net.load_state_dict(policy_net.state_dict())
             # print('Completed episode', i_episode, 'of', num_episodes)
 
-    reward_no_actions, _ = evaluate_sequence_with_target_net([0]*total_actions)
+    env.initial_maze.startNode = startNode
+    reward_no_actions, _ = evaluate_sequence_with_target_net([0] * total_actions)
     reward_final, optimal_sequence = evaluate_sequence_with_target_net(None)
 
     # Save variables:
     if enable_saving:
         save_variables(os.path.join('simulations', save_filename),
-                       episode_transfer_to_sink, env, steps_done, policy_net, maze_filename, p, time_samples, total_actions,
+                       episode_transfer_to_sink, env, steps_done, policy_net, maze_filename, p, time_samples,
+                       total_actions,
                        num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
                        replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink)
 
@@ -281,10 +302,11 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
     plt.ylabel('Transfer to Sink')
 
     training_legend_labels = []
-    training_labels = not len(episode_transfer_to_sink) + len(constants) == len(legend_labels)
+    generate_training_labels = not len(episode_transfer_to_sink) + len(constants) == len(legend_labels)
 
     for (i, transfer_to_sink) in enumerate(episode_transfer_to_sink):
-        transfer_to_sink_t = torch.cat(transfer_to_sink) #torch.tensor(transfer_to_sink, dtype=torch.float)
+        # transfer_to_sink_t = torch.cat(transfer_to_sink)
+        transfer_to_sink_t = torch.tensor(transfer_to_sink, dtype=torch.float)
         transfer_to_sink_len = len(transfer_to_sink_t)
         plt.plot(transfer_to_sink_t.numpy())
         # Take 100 episode averages and plot them too
@@ -292,25 +314,23 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
             means = transfer_to_sink_t.unfold(0, 100, 1).mean(1).view(-1)
             means = torch.cat((torch.zeros(99), means))
             plt.plot(means.numpy())
-            if training_labels:
+            if generate_training_labels:
                 training_legend_labels.extend(['training-' + str(i), 'mean 100-' + str(i)])
             else:
-                training_legend_labels.append(legend_labels[i])
-                training_legend_labels.append(legend_labels[i] + ' mean 100')
+                training_legend_labels.extend([legend_labels[i], legend_labels[i] + ' mean 100'])
 
         else:
-            if training_labels:
-                training_legend_labels.extend(['training-' + str(i)])
+            if generate_training_labels:
+                training_legend_labels.append('training-' + str(i))
             else:
                 training_legend_labels.append(legend_labels[i])
 
     if not constants == []:
         for k in constants:
-            plt.plot([k]*transfer_to_sink_len)
-    if training_labels:
-        legend_labels = training_legend_labels + legend_labels
+            plt.plot([k] * transfer_to_sink_len)
+        legend_labels = training_legend_labels + legend_labels[-len(constants):]
     else:
-        legend_labels = training_legend_labels + legend_labels[len(episode_transfer_to_sink):]
+        legend_labels = training_legend_labels
 
     plt.legend(legend_labels)
     plt.ylim(0, 1)
@@ -319,14 +339,45 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
 
 if __name__ == '__main__':
     print('learning_tools has started')
-    filename, elapsed = deep_Q_learning_maze(maze_filename='maze-zigzag-4x4-1', time_samples=350, num_episodes=1000, p=0.5)
+    training_startNodes = []
+    filename, elapsed, reward_final, optimal_sequence = deep_Q_learning_maze(maze_filename='maze-zigzag-4x4-1',
+                                                                             time_samples=350, num_episodes=300, p=0.5,
+                                                                             training_startNodes=training_startNodes)
+
     print('Variables saved in', ''.join((filename, '.pkl')))
     print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
     print("Elapsed time", elapsed, "sec.\n")
-    with open(os.path.join('simulations', filename +'.pkl' ), 'rb') as f:
+    with open(os.path.join('simulations', filename + '.pkl'), 'rb') as f:
         [episode_transfer_to_sink, env, steps_done, maze_filename, p, time_samples, total_actions,
          num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
          replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink] = pickle.load(f)
-    plot_durations([episode_transfer_to_sink, target_transfer_to_sink],
+
+    legend_labels=[]
+    if len(training_startNodes) > 1:
+        episode_transfer = [episode_transfer_to_sink[k::len(training_startNodes)] for k in
+                            range(len(training_startNodes))]
+        episode_transfer.append(
+            [sum(episode_transfer_to_sink[k * len(training_startNodes):(k + 1) * len(training_startNodes)])
+             / len(training_startNodes) for k in range(num_episodes)])
+        legend_labels = ['tranining']*(len(training_startNodes)+1)
+    else:
+        episode_transfer = [episode_transfer_to_sink]
+        training_startNodes = [0]
+    episode_transfer.append(target_transfer_to_sink)
+    legend_labels.append('target')
+
+    constants = [reward_no_actions, reward_final]
+    legend_labels.extend(['no action', 'final'])
+    plot_durations(episode_transfer,
                    title=''.join(('p=', str(env.p), ', T=', str(env.time_samples))),
-                   constants=[reward_no_actions, reward_final], legend_labels=['tranining', 'target', 'no action', 'final'])
+                   constants=constants,
+                   legend_labels=legend_labels
+                   )
+
+    # load test
+    fileToLoad = os.path.join('simulations', filename + '_policy_net.pt')
+    env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=None, sinkerNode=None,
+                   p=p, sink_rate=1, time_samples=time_samples, changeable_links=None,
+                   total_actions=total_actions, done_threshold=0.95)
+    target_net = DQN(len(env.state), env.action_space.n).to('cpu')
+    target_net.load_state_dict(torch.load(fileToLoad, map_location='cpu'))
