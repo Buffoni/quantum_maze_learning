@@ -55,7 +55,12 @@ class ReplayMemory(object):
 # Neural Network
 class DQN(nn.Module):
 
-    def __init__(self, inputs, outputs, intermediates=None):
+    def __init__(self, inputs, outputs, intermediates=None, env=None, diag_threshold=10**(-10)):
+        self.inputs = inputs
+        self.outputs = outputs
+        self.env = env
+        self.diag_threshold = diag_threshold
+
         super(DQN, self).__init__()
         if intermediates is None:
             intermediates = [int(np.sqrt(inputs * outputs)), int(np.sqrt(outputs * np.sqrt(inputs * outputs)))]
@@ -69,10 +74,25 @@ class DQN(nn.Module):
             self.layers.append(nn.Linear(intermediates[k], intermediates[k + 1]))
 
     def forward(self, x):
+        if self.env is not None:
+            mask = torch.zeros(self.outputs, requires_grad=False)
+            mask[0] = 1. # allows for 'no action' action
+            for n in range(self.env.quantum_system_size-1):
+                if x[0][n] >= self.diag_threshold:
+                    nx, ny = self.env.maze.node2xy(n)
+                    if nx > 0:
+                        mask[self.env.maze.xy2link(nx - 1, ny)] = 1.
+                    if nx < self.env.maze.width:
+                        mask[self.env.maze.xy2link(nx + 1, ny)] = 1.
+                    if ny > 0:
+                        mask[self.env.maze.xy2link(nx, ny - 1)] = 1.
+                    if ny < self.env.maze.height:
+                        mask[self.env.maze.xy2link(nx, ny + 1)] = 1.
+        else:
+            mask = torch.ones(self.outputs, requires_grad=False)
         for single_layer in self.layers:
             x = F.relu(single_layer(x))
-        return x
-
+        return F.normalize(x*mask)
 
 # deep_Q_learning
 def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_actions=4,
@@ -80,10 +100,13 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                          batch_size=128, gamma=0.999, eps_start=0.9, eps_end=0.05,
                          eps_decay=1000, target_update=10, replay_capacity=512,
                          save_filename=None, enable_tensorboardX=True, enable_saving=True,
-                         startNode=None, sinkerNode=None, training_startNodes=None):
+                         startNode=None, sinkerNode=None, training_startNodes=None,
+                         action_selector=None, diag_threshold=10**(-10)):
     """Function that performs the deep Q learning.
 
     Reference: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
+
+    action_selector: None (default), 'threshold_mask'
     """
     tic = time.time()
     codeName = 'deep_Q_learning_maze'
@@ -113,8 +136,12 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     n_actions = env.action_space.n
 
     # Setup Neural Network
-    policy_net = DQN(len(env.state), n_actions).to(device)
-    target_net = DQN(len(env.state), n_actions).to(device)
+    if action_selector == 'threshold_mask':
+        policy_net = DQN(len(env.state), n_actions, env=env, diag_threshold=diag_threshold).to(device)
+        target_net = DQN(len(env.state), n_actions, env=env, diag_threshold=diag_threshold).to(device)
+    else:
+        policy_net = DQN(len(env.state), n_actions).to(device)
+        target_net = DQN(len(env.state), n_actions).to(device)
     target_net.load_state_dict(policy_net.state_dict())
     target_net.eval()
 
@@ -127,7 +154,22 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             with torch.no_grad():
                 return net(state).max(1)[1].view(1, 1)
         else:
-            return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
+            if action_selector == 'threshold':
+                mask = set()
+                for n in range(env.quantum_system_size - 1):
+                    if env.quantum_state.full()[n, n] >= diag_threshold:
+                        nx, ny = env.maze.node2xy(n)
+                        if nx > 0:
+                            mask.add(env.maze.xy2link(nx - 1, ny))
+                        if nx < env.maze.width:
+                            mask.add(env.maze.xy2link(nx + 1, ny))
+                        if ny > 0:
+                            mask.add(env.maze.xy2link(nx, ny - 1))
+                        if ny < env.maze.height:
+                            mask.add(env.maze.xy2link(nx, ny + 1))
+                return torch.tensor([[random.choice(tuple(mask))]], device=device, dtype=torch.long)
+            else:
+                return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
 
     episode_transfer_to_sink = []
     target_transfer_to_sink = []
@@ -139,8 +181,13 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
         batch = Transition(*zip(*transitions))
 
-        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                                batch.next_state)), device=device, dtype=torch.uint8)
+        if torch.__version__ < '1.2.0':
+            non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=device,
+                                          dtype=torch.uint8) # version on qdab server
+        else:
+            non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=device,
+                                          dtype=torch.bool)  # current version, torch.uint8 is deprecated
+
         non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
@@ -340,9 +387,12 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
 if __name__ == '__main__':
     print('learning_tools has started')
     training_startNodes = []
+    action_selector = 'threshold_mask'
+    diag_threshold = 10**(-10)
     filename, elapsed, reward_final, optimal_sequence = deep_Q_learning_maze(maze_filename='maze-zigzag-4x4-1',
                                                                              time_samples=350, num_episodes=300, p=0.5,
-                                                                             training_startNodes=training_startNodes)
+                                                                             training_startNodes=training_startNodes,
+                                                                             action_selector=action_selector)
 
     print('Variables saved in', ''.join((filename, '.pkl')))
     print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
@@ -379,5 +429,8 @@ if __name__ == '__main__':
     env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=None, sinkerNode=None,
                    p=p, sink_rate=1, time_samples=time_samples, changeable_links=None,
                    total_actions=total_actions, done_threshold=0.95)
-    target_net = DQN(len(env.state), env.action_space.n).to('cpu')
+    if action_selector == 'threshold_mask':
+        target_net = DQN(len(env.state), env.action_space.n, env=env, diag_threshold=diag_threshold).to('cpu')
+    else:
+        target_net = DQN(len(env.state), env.action_space.n).to('cpu')
     target_net.load_state_dict(torch.load(fileToLoad, map_location='cpu'))
