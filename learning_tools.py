@@ -60,6 +60,7 @@ class DQN(nn.Module):
         self.outputs = outputs
         self.env = env
         self.diag_threshold = diag_threshold
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         super(DQN, self).__init__()
         if intermediates is None:
@@ -75,7 +76,7 @@ class DQN(nn.Module):
 
     def forward(self, x):
         if self.env is not None:
-            mask = torch.zeros(self.outputs, requires_grad=False)
+            mask = torch.zeros(self.outputs, requires_grad=False, device=self.device)
             mask[0] = 1. # allows for 'no action' action
             for n in range(self.env.quantum_system_size-1):
                 if x[0][n] >= self.diag_threshold:
@@ -89,7 +90,7 @@ class DQN(nn.Module):
                     if ny < self.env.maze.height:
                         mask[self.env.maze.xy2link(nx, ny + 1)] = 1.
         else:
-            mask = torch.ones(self.outputs, requires_grad=False)
+            mask = torch.ones(self.outputs, requires_grad=False, device=self.device)
         for single_layer in self.layers:
             x = F.relu(single_layer(x))
         return F.normalize(x*mask)
@@ -101,7 +102,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                          eps_decay=1000, target_update=10, replay_capacity=512,
                          save_filename=None, enable_tensorboardX=True, enable_saving=True,
                          startNode=None, sinkerNode=None, training_startNodes=None,
-                         action_selector=None, diag_threshold=10**(-10)):
+                         action_selector=None, diag_threshold=10**(-4)):
     """Function that performs the deep Q learning.
 
     Reference: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
@@ -388,7 +389,7 @@ if __name__ == '__main__':
     print('learning_tools has started')
     training_startNodes = []
     action_selector = 'threshold_mask'
-    diag_threshold = 10**(-10)
+    diag_threshold = 10**(-4)
     filename, elapsed, reward_final, optimal_sequence = deep_Q_learning_maze(maze_filename='maze-zigzag-4x4-1',
                                                                              time_samples=350, num_episodes=300, p=0.5,
                                                                              training_startNodes=training_startNodes,
