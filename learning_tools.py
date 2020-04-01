@@ -55,7 +55,7 @@ class ReplayMemory(object):
 # Neural Network
 class DQN(nn.Module):
 
-    def __init__(self, inputs, outputs, intermediates=None, env=None, diag_threshold=10**(-10)):
+    def __init__(self, inputs, outputs, intermediates=None, env=None, diag_threshold=10**(-14)):
         self.inputs = inputs
         self.outputs = outputs
         self.env = env
@@ -102,12 +102,16 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                          eps_decay=1000, target_update=10, replay_capacity=512,
                          save_filename=None, enable_tensorboardX=True, enable_saving=True,
                          startNode=None, sinkerNode=None, training_startNodes=None,
-                         action_selector=None, diag_threshold=10**(-4)):
+                         action_selector=None, diag_threshold=10**(-12), link_update=0.1, action_mode='reverse'):
     """Function that performs the deep Q learning.
 
     Reference: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
 
-    action_selector: None (default), 'threshold_mask'
+    action_selector:
+        None (default), i.e. pick any action
+        'threshold_mask', i.e. pick any action near a node with population greater than diag_threshold
+        'probability_mask', i.e. pick a node according to the population, and from that an action according to the links
+                            from that node
     """
     tic = time.time()
     codeName = 'deep_Q_learning_maze'
@@ -115,7 +119,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
     env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=startNode, sinkerNode=sinkerNode,
                    p=p, sink_rate=1, time_samples=time_samples, changeable_links=changeable_links,
-                   total_actions=total_actions, done_threshold=0.95)
+                   total_actions=total_actions, done_threshold=0.95, link_update=link_update, action_mode=action_mode)
     if startNode is None:
         startNode = env.initial_maze.startNode
     if sinkerNode is None:
@@ -140,6 +144,9 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     if action_selector == 'threshold_mask':
         policy_net = DQN(len(env.state), n_actions, env=env, diag_threshold=diag_threshold).to(device)
         target_net = DQN(len(env.state), n_actions, env=env, diag_threshold=diag_threshold).to(device)
+    elif action_selector == 'probability_mask':
+        policy_net = DQN(len(env.state), n_actions, env=env, diag_threshold=diag_threshold).to(device)
+        target_net = DQN(len(env.state), n_actions, env=env, diag_threshold=diag_threshold).to(device)
     else:
         policy_net = DQN(len(env.state), n_actions).to(device)
         target_net = DQN(len(env.state), n_actions).to(device)
@@ -149,13 +156,13 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     optimizer = optim.RMSprop(policy_net.parameters())
     memory = ReplayMemory(replay_capacity)
 
-    def select_action(state, eps_threshold, net=policy_net):
+    def select_action(state, eps_threshold, net=policy_net, noAction_probability=0.05):
         sample = random.random()
         if sample > eps_threshold:
             with torch.no_grad():
                 return net(state).max(1)[1].view(1, 1)
         else:
-            if action_selector == 'threshold':
+            if action_selector == 'threshold_mask':
                 mask = set()
                 for n in range(env.quantum_system_size - 1):
                     if env.quantum_state.full()[n, n] >= diag_threshold:
@@ -169,6 +176,34 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                         if ny < env.maze.height:
                             mask.add(env.maze.xy2link(nx, ny + 1))
                 return torch.tensor([[random.choice(tuple(mask))]], device=device, dtype=torch.long)
+            elif action_selector == 'probability_mask':
+                # note that in this way you always define a valid action, action=0 (noAction) is never selected
+                population = np.real(np.diag(env.quantum_state.full())[:env.quantum_system_size - 1])
+                population = population/population.sum()  # normalize
+                n = np.random.choice(range(env.quantum_system_size - 1), 1, p=population)
+                nx, ny = env.maze.node2xy(n)
+                available_links = [0] # noAction
+                if nx > 0:
+                    available_links.append(1)
+                if nx < env.maze.width:
+                    available_links.append(3)
+                if ny > 0:
+                    available_links.append(2)
+                if ny < env.maze.height:
+                    available_links.append(4)
+                selected_direction = np.random.choice(available_links, 1, p=[noAction_probability] + \
+                                        [(1-noAction_probability)/(len(available_links)-1)]*(len(available_links)-1))
+                if selected_direction == 1:
+                    selected_link = env.maze.xy2link(nx - 1, ny)
+                elif selected_direction == 3:
+                    selected_link = env.maze.xy2link(nx + 1, ny)
+                elif selected_direction == 2:
+                    selected_link = env.maze.xy2link(nx, ny - 1)
+                elif selected_direction == 4:
+                    selected_link = env.maze.xy2link(nx, ny + 1)
+                else:
+                    selected_link = 0
+                return torch.tensor([[selected_link]], device=device, dtype=torch.long)
             else:
                 return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
 
@@ -388,12 +423,17 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
 if __name__ == '__main__':
     print('learning_tools has started')
     training_startNodes = []
-    action_selector = 'threshold_mask'
+    action_selector = 'probability_mask' # None, 'threshold_mask', 'probability_mask'
     diag_threshold = 10**(-4)
+    link_update = 0.1
+    action_mode = 'subtract' # 'reverse', 'sum', 'subtract'
     filename, elapsed, reward_final, optimal_sequence = deep_Q_learning_maze(maze_filename='maze-zigzag-4x4-1',
                                                                              time_samples=350, num_episodes=300, p=0.5,
                                                                              training_startNodes=training_startNodes,
-                                                                             action_selector=action_selector)
+                                                                             action_selector=action_selector,
+                                                                             diag_threshold=diag_threshold,
+                                                                             link_update=link_update,
+                                                                             action_mode=action_mode)
 
     print('Variables saved in', ''.join((filename, '.pkl')))
     print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
@@ -431,6 +471,8 @@ if __name__ == '__main__':
                    p=p, sink_rate=1, time_samples=time_samples, changeable_links=None,
                    total_actions=total_actions, done_threshold=0.95)
     if action_selector == 'threshold_mask':
+        target_net = DQN(len(env.state), env.action_space.n, env=env, diag_threshold=diag_threshold).to('cpu')
+    elif action_selector == 'probability_mask':
         target_net = DQN(len(env.state), env.action_space.n, env=env, diag_threshold=diag_threshold).to('cpu')
     else:
         target_net = DQN(len(env.state), env.action_space.n).to('cpu')

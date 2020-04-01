@@ -16,13 +16,16 @@ import copy
 import gym
 from gym import spaces
 from gym import utils
-from matplotlib import animation
+
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from gym_quantum_maze.envs.quantum_tools import *
 import os
 import pickle
 import copy
+# from matplotlib import pyplot as plt
+from matplotlib import animation
+# import numpy as np
 
 
 class QuantumMazeEnv(gym.Env, utils.EzPickle):
@@ -32,7 +35,9 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
     }
 
     def __init__(self, maze_size=(10, 5), startNode=0, sinkerNode=None, p=0.1, sink_rate=1, time_samples=100,
-                 changeable_links=None, total_actions=8, done_threshold=0.95, maze_filename=None):
+                 changeable_links=None, total_actions=8, done_threshold=0.95, maze_filename=None, link_update=0.1,
+                 action_mode=None):
+        # action_mode = 'reverse', 'sum', 'subtract'
         # evolution parameters
         self.time_samples = time_samples
         self.sink_rate = sink_rate
@@ -59,6 +64,11 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
 
         self.total_actions = total_actions
         self.done_threshold = done_threshold
+        self.link_update = link_update
+        if action_mode is None:
+            self.action_mode = 'reverse'
+        else:
+            self.action_mode = action_mode
 
         # initial condition, updated in self.reset()
         self.quantum_state = None
@@ -114,10 +124,21 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
         """Perform an action, that is, set the value of the adjacency matrix"""
         if _maze is None:
             _maze = self.maze
-        if 1 <= action <= len(self.changeable_links):
-            _maze.reverse_link(self.changeable_links[int(action) - 1])
-            # minus 1 to correctly index changeable_links.
-            # action==0 is no action
+        if 1 <= action <= len(self.changeable_links): # action==0 is no action
+            if self.action_mode == 'reverse':
+                _maze.reverse_link(self.changeable_links[int(action) - 1])
+                # minus 1 to correctly index changeable_links.
+            elif self.action_mode == 'sum':
+                _maze.set_link(action, _maze.get_link(action) + self.link_update)
+                # TODO: changeable_links mask to be implemented
+            elif self.action_mode == 'subtract':
+                # _maze.set_link(action, _maze.get_link(action) - self.link_update)
+                link_value = _maze.get_link(action)
+                if link_value - self.link_update > 0:
+                    _maze.set_link(action, link_value - self.link_update)
+                else:
+                    _maze.set_link(action, 0)
+                # TODO: changeable_links mask to be implemented. Note that the link cannot go below 0
 
     def is_done(self):
         """Check whether the game is finished
@@ -206,7 +227,7 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
         return img, ax
 
     def render_video(self, file_name='quantum_maze_video_test', frames_per_evolution=10, action_sequence=None,
-                     color_map='CMRmap_r'):
+                     color_map='CMRmap_r', mode=None):
         """Generates a video of the quantum system dynamics.
 
         The set of supported modes varies per environment. (And some environments do not support rendering at all.)
@@ -225,27 +246,34 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
             list of actions
         color_map : matplotlib.colors
             palette used to color the quantum state in the maze
+        mode: str or None (default)
+            choice on the plot. If None shows the quantum state evolution on the maze, if 'histogram' plot the popolation
 
         Returns
         -------
-        numpy.ndarray, AxesImage
-            numpy array with rgb colors for each pixel, AxesImage obtained from pyplot.imshow() (when plotted)
+        None
         """
         if action_sequence is None:
             action_sequence = []
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        div = make_axes_locatable(ax)
-        cax = div.append_axes('right', '5%', '5%')
+
+        if mode == 'histogram':
+            fig = plt.figure()
+        else:
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            div = make_axes_locatable(ax)
+            cax = div.append_axes('right', '5%', '5%')
 
         _maze = copy.deepcopy(self.initial_maze)
         quantum_state_sequence = [self.initial_quantum_state] + \
                                  run_maze_save_dynamics(_maze.adjacency, self.initial_quantum_state,
                                                         _maze.sinkerNode, self.p, self.time_samples,
                                                         self.sink_rate, quantum_states_saved=frames_per_evolution)[0]
-
-        frames = [plot_maze_and_quantumState(_maze, qs, show=False, color_map=color_map)[0]
-                  for qs in quantum_state_sequence]
+        if mode == 'histogram':
+            frames = [np.real(np.diag(qs.full())) for qs in quantum_state_sequence]
+        else:
+            frames = [plot_maze_and_quantumState(_maze, qs, show=False, color_map=color_map)[0]
+                      for qs in quantum_state_sequence]
 
         for idx in range(len(action_sequence)):
             self.do_action(action=action_sequence[idx], _maze=_maze)
@@ -253,16 +281,35 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
                                                                _maze.sinkerNode, self.p,
                                                                self.time_samples, self.sink_rate,
                                                                quantum_states_saved=frames_per_evolution)
-            frames += [plot_maze_and_quantumState(_maze, qs, show=False, color_map=color_map)[0]
-                       for qs in quantum_state_sequence]
+            if mode == 'histogram':
+                frames += [np.real(np.diag(qs.full())) for qs in quantum_state_sequence]
+            else:
+                frames += [plot_maze_and_quantumState(_maze, qs, show=False, color_map=color_map)[0]
+                          for qs in quantum_state_sequence]
 
-        im = ax.imshow(frames[0], origin='lower', cmap=color_map)  # Here make an AxesImage rather than contour
-        fig.colorbar(im, cax=cax)
+        if mode == 'histogram':
+            im = plt.bar(range(self.quantum_system_size), frames[0])
+            plt.ylim(0, 1)
 
-        ani = animation.FuncAnimation(fig, lambda x: im.set_data(frames[x]), frames=len(frames), interval=100,
-                                      repeat_delay=1000, repeat=True)
+            def animate(i):
+                for rect, yi in zip(im, frames[i]):
+                    rect.set_height(yi)
+                return im
+
+            ani = animation.FuncAnimation(fig, animate, frames=len(frames), interval=40)
+
+        else:
+            im = ax.imshow(frames[0], origin='lower', cmap=color_map)  # Here make an AxesImage rather than contour
+            fig.colorbar(im, cax=cax)
+
+            def animate(i):
+                im.set_data(frames[i])
+                return im
+
+            ani = animation.FuncAnimation(fig, animate, frames=len(frames), interval=40)
 
         ani.save(''.join([file_name, '.mp4']))
+        plt.show()
 
         return ani
 
@@ -275,15 +322,24 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
 
 if __name__ == '__main__':
     print('quantum_maze_env has started')
-    env = QuantumMazeEnv(time_samples=2000)
+    env = QuantumMazeEnv(maze_size=(5, 5), time_samples=300, link_update=0.3, action_mode='reverse')
     env.reset()
+    plt.figure()
     env.render()
     #
     env.step(action=1)
+    plt.figure()
     env.render()
     #
     env.step(action=1)
+    plt.figure()
     env.render()
     #
-    env.render_video(action_sequence=[1, 2, 3, 4], file_name=os.path.join(os.path.curdir, '..\..\quantum_maze_video'))
+    env.render_video(action_sequence=[1, 2, 3, 4], frames_per_evolution=30,
+                     file_name=os.path.join(os.path.curdir, '..\..\quantum_maze_video')
+                     )
+    env.render_video(action_sequence=[1, 2, 3, 4],
+                     file_name=os.path.join(os.path.curdir, '..\..\quantum_maze_video_histogram'),
+                     mode='histogram'
+                     )
     env.close()
