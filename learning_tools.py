@@ -179,6 +179,8 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             elif action_selector == 'probability_mask':
                 # note that in this way you always define a valid action, action=0 (noAction) is never selected
                 population = np.real(np.diag(env.quantum_state.full())[:env.quantum_system_size - 1])
+                if population.min() < 0:
+                    population = population - population.min()
                 population = population/population.sum()  # normalize
                 n = np.random.choice(range(env.quantum_system_size - 1), 1, p=population)
                 nx, ny = env.maze.node2xy(n)
@@ -313,6 +315,8 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
                 # Move to the next state
                 state = next_state
+                if any(np.real(np.diag(env.quantum_state.full())) < 0):
+                    print(np.real(np.diag(env.quantum_state.full())))
 
                 if done:
                     break
@@ -426,9 +430,9 @@ if __name__ == '__main__':
     action_selector = 'probability_mask' # None, 'threshold_mask', 'probability_mask'
     diag_threshold = 10**(-4)
     link_update = 0.1
-    action_mode = 'subtract' # 'reverse', 'sum', 'subtract'
+    action_mode = 'reverse' # 'reverse', 'sum', 'subtract'
     filename, elapsed, reward_final, optimal_sequence = deep_Q_learning_maze(maze_filename='maze-zigzag-4x4-1',
-                                                                             time_samples=350, num_episodes=300, p=0.5,
+                                                                             time_samples=350, num_episodes=300, p=0,
                                                                              training_startNodes=training_startNodes,
                                                                              action_selector=action_selector,
                                                                              diag_threshold=diag_threshold,

@@ -36,12 +36,13 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
 
     def __init__(self, maze_size=(10, 5), startNode=0, sinkerNode=None, p=0.1, sink_rate=1, time_samples=100,
                  changeable_links=None, total_actions=8, done_threshold=0.95, maze_filename=None, link_update=0.1,
-                 action_mode=None):
+                 action_mode=None, dt=1e-2):
         # action_mode = 'reverse', 'sum', 'subtract'
         # evolution parameters
         self.time_samples = time_samples
         self.sink_rate = sink_rate
         self.p = p
+        self.dt = dt
 
         if maze_filename is None:
             self.initial_maze = Maze(maze_size=maze_size, startNode=startNode, sinkerNode=sinkerNode)
@@ -171,7 +172,7 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
         self.actions_taken += 1
 
         new_quantum_state, _ = run_maze(self.maze.adjacency, self.quantum_state,
-                                        self.initial_maze.sinkerNode, self.p, self.time_samples, self.sink_rate)
+                                        self.initial_maze.sinkerNode, self.p, self.time_samples, self.sink_rate, self.dt)
 
         # reward defined as how much gets to the sink in the current state transition
         sink = self.quantum_system_size - 1
