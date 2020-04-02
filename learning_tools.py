@@ -315,8 +315,8 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
                 # Move to the next state
                 state = next_state
-                if any(np.real(np.diag(env.quantum_state.full())) < 0):
-                    print(np.real(np.diag(env.quantum_state.full())))
+                # if any(np.real(np.diag(env.quantum_state.full())) < 0):
+                #     print(np.real(np.diag(env.quantum_state.full())))
 
                 if done:
                     break
