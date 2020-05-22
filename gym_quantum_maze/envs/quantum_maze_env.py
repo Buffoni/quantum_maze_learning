@@ -36,9 +36,10 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
 
     def __init__(self, maze_size=(10, 5), startNode=0, sinkerNode=None, p=0.1, sink_rate=1, time_samples=100,
                  changeable_links=None, total_actions=8, done_threshold=0.95, maze_filename=None, link_update=0.1,
-                 action_mode=None, dt=1e-2):
+                 action_mode=None, state_selector=3, dt=1e-2):
         # action_mode = 'reverse', 'sum', 'subtract'
         # evolution parameters
+        self.state_selector = state_selector
         self.time_samples = time_samples
         self.sink_rate = sink_rate
         self.p = p
@@ -95,13 +96,20 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
     @property
     def state(self):
         density_matrix = self.quantum_state.full()
-        return [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)] + \
+        if self.state_selector == 1:
+            state = [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)] #+ \
+                    #[self.actions_taken / self.total_actions]
+        elif self.state_selector == 2:
+            state = [self.maze.get_link(link) for link in self.changeable_links] + \
+               [self.actions_taken / self.total_actions]
+        else:
+            state = [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)] + \
                [func(density_matrix[m, n]) for m in range(self.quantum_system_size)
                 for n in range(m + 1, self.quantum_system_size)
-                for func in (lambda x: np.real(x), lambda x: np.imag(x))] + \
-               [self.maze.get_link(link) for link in self.changeable_links] + \
-               [self.actions_taken / self.total_actions]
-        # action_taken is normalized. Note that this definition has a list of mixed types
+                for func in (lambda x: np.real(x), lambda x: np.imag(x))]
+            # action_taken is normalized. Note that this definition has a list of mixed types
+        return state
+
 
     @state.setter
     def state(self, value):

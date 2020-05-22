@@ -465,11 +465,11 @@ class Maze(object):
 if __name__ == "__main__":
     print('maze_tools has started')
     # maze_tools test
-    myMaze = Maze(maze_size=(20, 10))
-    myMaze.plot_maze(show_nodes=True, show_links=False)
-    myMaze.save('saving_test')
+    myMaze = Maze(maze_size=(8, 8))
+    myMaze.plot_maze(show_nodes=False, show_links=False)
+    myMaze.save('maze_8x8')
     # myMaze = None
-    myMaze2 = Maze().load('saving_test')
-    myMaze2.plot_maze(show_nodes=True, show_links=False)
+    myMaze2 = Maze().load('maze_8x8')
+    myMaze2.plot_maze(show_nodes=False, show_links=False)
     # comparison test between myMaze and myMaze2
     np.all([np.all(myMaze.__dict__[x] == myMaze2.__dict__[x]) for x in myMaze.__dict__.keys()])
