@@ -336,7 +336,7 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
             episode_reward_startNode[id_startNode] = episode_reward.to(device='cpu')
             episode_transfer_to_sink.append(episode_reward_startNode[id_startNode])
 
-            #tune.report(episode_reward=episode_reward_startNode[id_startNode])
+            #tune.report(episode_reward=episode_reward_startNode[id_startNode].item())
             tune.track.log(episode_reward=episode_reward_startNode[id_startNode].item())
 
         if enable_tensorboardX:
