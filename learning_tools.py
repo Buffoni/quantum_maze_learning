@@ -23,6 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from tensorboardX import SummaryWriter
+from ray import tune
 
 from gym_quantum_maze.envs import quantum_maze_env
 
@@ -326,6 +327,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             optimize_model()
             episode_reward_startNode[id_startNode] = episode_reward.to(device='cpu')
             episode_transfer_to_sink.append(episode_reward_startNode[id_startNode])
+            tune.report(episode_reward=episode_reward_startNode[id_startNode])
 
         if enable_tensorboardX:
             if len(training_startNodes) > 1:
@@ -424,39 +426,50 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
     plt.ylim(0, 1)
     plt.show()
 
+def tuneLauncher(conf):
+    training_startNodes = []
+    action_selector = 'probability_mask'  # None, 'threshold_mask', 'probability_mask'
+    diag_threshold = 10 ** (-4)
+    link_update = 0.1
+    action_mode = 'reverse'  # 'reverse', 'sum', 'subtract'
+
+    deep_Q_learning_maze(maze_filename='maze_8x8.pkl',
+                         time_samples=conf['t_value-actions'][0], num_episodes=2000, p=conf['p_value'],
+                         total_actions=conf['t_value-actions'][1],
+                         training_startNodes=training_startNodes,
+                         action_selector=action_selector,
+                         diag_threshold=diag_threshold,
+                         link_update=link_update,
+                         action_mode=action_mode,
+                         state_selector=conf['state_selector'],
+                         )
+
 
 if __name__ == '__main__':
 
     print('learning_tools has started')
-    training_startNodes = []
-    action_selector = 'probability_mask' # None, 'threshold_mask', 'probability_mask'
-    diag_threshold = 10**(-4)
-    link_update = 0.1
-    action_mode = 'reverse' # 'reverse', 'sum', 'subtract'
-    state_selector = [1, 3]
-    p_value = [0, 0.2, 0.4, 0.6, 0.8, 1]
-    t_value = [500, 1000, 1500, 2000, 3000, 1000]
-    actions = [8, 8, 8, 8, 4, 12]
-    '''
-    #Training section, uncomment on the server only!!!
-    for i in range(len(t_value)):
-        for s in state_selector:
-            for p in p_value:
-                filename, elapsed, reward_final, optimal_sequence = deep_Q_learning_maze(maze_filename='maze_8x8.pkl',
-                                                                                     time_samples=t_value[i], num_episodes=2000, p=p,
-                                                                                     total_actions=actions[i],
-                                                                                     training_startNodes=training_startNodes,
-                                                                                     action_selector=action_selector,
-                                                                                     diag_threshold=diag_threshold,
-                                                                                     link_update=link_update,
-                                                                                     action_mode=action_mode,
-                                                                                     state_selector=s,
-                                                                                     )
 
-    print('Variables saved in', ''.join((filename, '.pkl')))
-    print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
-    print("Elapsed time", elapsed, "sec.\n")
-    '''
+    # config = {
+    #     'state_selector': tune.grid_search([1, 3]),
+    #     'p_value': tune.grid_search([0, 0.2, 0.4, 0.6, 0.8, 1]),
+    #     't_value-actions': tune.grid_search([(500, 8), (1000, 8), (1500, 8), (2000, 8), (3000, 4), (1000, 12)]),
+    # }
+
+    config = {
+        'state_selector': tune.grid_search([1]),
+        'p_value': tune.grid_search([0]),
+        't_value-actions': tune.grid_search([(500, 8)]),
+    }
+
+    trialResources = {'cpu': 1./10, 'gpu': 1./10}
+
+    #Training section, uncomment on the server only!!!
+    analysis = tune.run(tuneLauncher, config=config,
+                        resources_per_trial=trialResources, local_dir='tuneOutput')
+    print("BEST PARAMETERS")
+    print(analysis.get_best_config(metric="episode_reward"))
+    analysis.dataframe().to_pickle('tuneAnalysis.p')
+
 
     # This section prints the results of a trained agent at different p
     filename = ['P00', 'P02', 'P04', 'P06', 'P08', 'P10']
