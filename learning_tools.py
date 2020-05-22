@@ -23,6 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from tensorboardX import SummaryWriter
+import ray
 from ray import tune
 
 from gym_quantum_maze.envs import quantum_maze_env
@@ -97,7 +98,7 @@ class DQN(nn.Module):
         return F.normalize(x*mask)
 
 # deep_Q_learning
-def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_actions=4,
+def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples=100, total_actions=4,
                          num_episodes=100, changeable_links=None,  # [4, 15, 30, 84],
                          batch_size=128, gamma=0.999, eps_start=0.9, eps_end=0.05,
                          eps_decay=1000, target_update=10, replay_capacity=512,
@@ -118,10 +119,17 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     codeName = 'deep_Q_learning_maze'
     today = datetime.datetime.now()
 
-    env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=startNode, sinkerNode=sinkerNode,
+    # env = gym.make('quantum-maze-v0', maze_filename=os.path.join(base_path, maze_filename), startNode=startNode, sinkerNode=sinkerNode,
+    #                p=p, sink_rate=1, time_samples=time_samples, changeable_links=changeable_links,
+    #                total_actions=total_actions, done_threshold=0.95, link_update=link_update, action_mode=action_mode,
+    #                state_selector=state_selector)
+
+    env = quantum_maze_env.QuantumMazeEnv(maze_filename=os.path.join(base_path, maze_filename), startNode=startNode,
+                   sinkerNode=sinkerNode,
                    p=p, sink_rate=1, time_samples=time_samples, changeable_links=changeable_links,
                    total_actions=total_actions, done_threshold=0.95, link_update=link_update, action_mode=action_mode,
                    state_selector=state_selector)
+
     if startNode is None:
         startNode = env.initial_maze.startNode
     if sinkerNode is None:
@@ -137,7 +145,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
         save_filename = ''.join((today.strftime('%Y-%m-%d_%H-%M-%S_'), codeName, config_options))
 
     if enable_tensorboardX:
-        writer = SummaryWriter(os.path.join('tensorboardX', save_filename))  # tensorboardX writer
+        writer = SummaryWriter(os.path.join(base_path, 'tensorboardX', save_filename))  # tensorboardX writer
 
     # Get number of actions from gym action space
     n_actions = env.action_space.n
@@ -327,7 +335,9 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             optimize_model()
             episode_reward_startNode[id_startNode] = episode_reward.to(device='cpu')
             episode_transfer_to_sink.append(episode_reward_startNode[id_startNode])
-            tune.report(episode_reward=episode_reward_startNode[id_startNode])
+
+            #tune.report(episode_reward=episode_reward_startNode[id_startNode])
+            tune.track.log(episode_reward=episode_reward_startNode[id_startNode].item())
 
         if enable_tensorboardX:
             if len(training_startNodes) > 1:
@@ -356,7 +366,10 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
     # Save variables:
     if enable_saving:
-        save_variables(os.path.join('simulations', save_filename),
+        if not os.path.isdir(os.path.join(base_path, 'simulations')):
+            os.mkdir(os.path.join(base_path, 'simulations'))
+
+        save_variables(os.path.join(base_path, 'simulations', save_filename),
                        episode_transfer_to_sink, env, steps_done, policy_net, maze_filename, p, time_samples,
                        total_actions,
                        num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
@@ -426,50 +439,60 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
     plt.ylim(0, 1)
     plt.show()
 
-def tuneLauncher(conf):
-    training_startNodes = []
-    action_selector = 'probability_mask'  # None, 'threshold_mask', 'probability_mask'
-    diag_threshold = 10 ** (-4)
-    link_update = 0.1
-    action_mode = 'reverse'  # 'reverse', 'sum', 'subtract'
+def createLauncher(baseConf):
+    def tuneLauncher(conf):
+        deep_Q_learning_maze(base_path=baseConf['base_path'],
+                             maze_filename=baseConf['maze_filename'],
+                             time_samples=conf['t_value-actions'][0],
+                             num_episodes=baseConfig['num_episodes'], p=conf['p_value'],
+                             total_actions=conf['t_value-actions'][1],
+                             training_startNodes=baseConf['training_startNodes'],
+                             action_selector=baseConf['action_selector'],
+                             diag_threshold=baseConf['diag_threshold'],
+                             link_update=baseConf['link_update'],
+                             action_mode=baseConf['action_mode'],
+                             state_selector=conf['state_selector'],
+                             )
 
-    deep_Q_learning_maze(maze_filename='maze_8x8.pkl',
-                         time_samples=conf['t_value-actions'][0], num_episodes=2000, p=conf['p_value'],
-                         total_actions=conf['t_value-actions'][1],
-                         training_startNodes=training_startNodes,
-                         action_selector=action_selector,
-                         diag_threshold=diag_threshold,
-                         link_update=link_update,
-                         action_mode=action_mode,
-                         state_selector=conf['state_selector'],
-                         )
-
+    return tuneLauncher
 
 if __name__ == '__main__':
-
     print('learning_tools has started')
 
-    # config = {
-    #     'state_selector': tune.grid_search([1, 3]),
-    #     'p_value': tune.grid_search([0, 0.2, 0.4, 0.6, 0.8, 1]),
-    #     't_value-actions': tune.grid_search([(500, 8), (1000, 8), (1500, 8), (2000, 8), (3000, 4), (1000, 12)]),
-    # }
+    baseConfig = {
+        'training_startNodes': [],
+        'action_selector': 'probability_mask',  # None, 'threshold_mask', 'probability_mask'
+        'diag_threshold': 10 ** (-4),
+        'link_update': 0.1,
+        'action_mode': 'reverse',  # 'reverse', 'sum', 'subtract'
+        'num_episodes': 2000,
+        'base_path': os.getcwd(),
+        'maze_filename': 'maze_8x8.pkl',
+    }
 
-    config = {
-        'state_selector': tune.grid_search([1]),
-        'p_value': tune.grid_search([0]),
-        't_value-actions': tune.grid_search([(500, 8)]),
+    parallelConfig = {
+        'state_selector': tune.grid_search([1, 3]),
+        'p_value': tune.grid_search([0, 0.2, 0.4, 0.6, 0.8, 1]),
+        't_value-actions': tune.grid_search([(500, 8), (1000, 8), (1500, 8), (2000, 8), (3000, 4), (1000, 12)]),
     }
 
     trialResources = {'cpu': 1./10, 'gpu': 1./10}
 
+    #Debug
+    #ray.init(local_mode=True)
+
+    '''
     #Training section, uncomment on the server only!!!
-    analysis = tune.run(tuneLauncher, config=config,
+    today = datetime.datetime.now()
+    analysis = tune.run(createLauncher(baseConfig), config=parallelConfig,
                         resources_per_trial=trialResources, local_dir='tuneOutput')
     print("BEST PARAMETERS")
     print(analysis.get_best_config(metric="episode_reward"))
-    analysis.dataframe().to_pickle('tuneAnalysis.p')
+    analysis.dataframe().to_pickle('tuneOutput/'+today.strftime('%Y-%m-%d_%H-%M-%S')+'-tuneAnalysis.p')
 
+    import sys
+    sys.exit()
+    '''
 
     # This section prints the results of a trained agent at different p
     filename = ['P00', 'P02', 'P04', 'P06', 'P08', 'P10']
@@ -496,13 +519,13 @@ if __name__ == '__main__':
          replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink] = pickle.load(f)
 
     legend_labels=[]
-    if len(training_startNodes) > 1:
-        episode_transfer = [episode_transfer_to_sink[k::len(training_startNodes)] for k in
-                            range(len(training_startNodes))]
+    if len(baseConfig['training_startNodes']) > 1:
+        episode_transfer = [episode_transfer_to_sink[k::len(baseConfig['training_startNodes'])] for k in
+                            range(len(baseConfig['training_startNodes']))]
         episode_transfer.append(
-            [sum(episode_transfer_to_sink[k * len(training_startNodes):(k + 1) * len(training_startNodes)])
-             / len(training_startNodes) for k in range(num_episodes)])
-        legend_labels = ['tranining']*(len(training_startNodes)+1)
+            [sum(episode_transfer_to_sink[k * len(baseConfig['training_startNodes']):(k + 1) * len(baseConfig['training_startNodes'])])
+             / len(baseConfig['training_startNodes']) for k in range(num_episodes)])
+        legend_labels = ['tranining']*(len(baseConfig['training_startNodes'])+1)
     else:
         episode_transfer = [episode_transfer_to_sink]
         training_startNodes = [0]
