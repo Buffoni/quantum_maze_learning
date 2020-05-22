@@ -259,7 +259,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             evaluate_optimal_action = False
 
         env.reset()
-        state = torch.tensor(env.state, device=device).unsqueeze(0)
+        state = torch.tensor(env.state, device=device, dtype=torch.float32).unsqueeze(0)
         episode_reward = 0
         for t in range(total_actions):
             # Select and perform an action
@@ -277,7 +277,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             if done:
                 next_state = None
             else:
-                next_state = torch.tensor(next_state, device=device).unsqueeze(0)
+                next_state = torch.tensor(next_state, device=device, dtype=torch.float32).unsqueeze(0)
 
             # Move to the next state
             state = next_state
@@ -297,7 +297,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             # Initialize the environment and state
             env.initial_maze.startNode = startNode_tmp
             env.reset()
-            state = torch.tensor(env.state, device=device).unsqueeze(0)
+            state = torch.tensor(env.state, device=device, dtype=torch.float32).unsqueeze(0)
             episode_reward = 0
             for t in range(total_actions):
                 # Select and perform an action
@@ -309,7 +309,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                 if done:
                     next_state = None
                 else:
-                    next_state = torch.tensor(next_state, device=device).unsqueeze(0)
+                    next_state = torch.tensor(next_state, device=device, dtype=torch.float32).unsqueeze(0)
 
                 # Store the transition in memory
                 memory.push(state, action, next_state, reward)
