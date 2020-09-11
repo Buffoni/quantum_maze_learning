@@ -102,7 +102,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                          eps_decay=1000, target_update=10, replay_capacity=512,
                          save_filename=None, enable_tensorboardX=True, enable_saving=True,
                          startNode=None, sinkerNode=None, training_startNodes=None,
-                         action_selector=None, diag_threshold=10**(-12), link_update=0.1, action_mode='reverse'):
+                         action_selector=None, state_selector=3, diag_threshold=10**(-12), link_update=0.1, action_mode='reverse'):
     """Function that performs the deep Q learning.
 
     Reference: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
@@ -119,7 +119,8 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
     env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=startNode, sinkerNode=sinkerNode,
                    p=p, sink_rate=1, time_samples=time_samples, changeable_links=changeable_links,
-                   total_actions=total_actions, done_threshold=0.95, link_update=link_update, action_mode=action_mode)
+                   total_actions=total_actions, done_threshold=0.95, link_update=link_update, action_mode=action_mode,
+                   state_selector=state_selector)
     if startNode is None:
         startNode = env.initial_maze.startNode
     if sinkerNode is None:
@@ -130,7 +131,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     # if gpu is to be used
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    config_options = '_EP{0}_A{1}_T{2}_P{3:02.0f}'.format(num_episodes, total_actions, time_samples, 10 * p)
+    config_options = '_ST{0}_A{1}_T{2}_P{3:02.0f}'.format(state_selector, total_actions, time_samples, 10 * p)
     if save_filename is None and enable_saving:
         save_filename = ''.join((today.strftime('%Y-%m-%d_%H-%M-%S_'), codeName, config_options))
 
@@ -425,24 +426,58 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
 
 
 if __name__ == '__main__':
+
     print('learning_tools has started')
     training_startNodes = []
     action_selector = 'probability_mask' # None, 'threshold_mask', 'probability_mask'
     diag_threshold = 10**(-4)
     link_update = 0.1
     action_mode = 'reverse' # 'reverse', 'sum', 'subtract'
-    filename, elapsed, reward_final, optimal_sequence = deep_Q_learning_maze(maze_filename='maze-zigzag-4x4-1',
-                                                                             time_samples=350, num_episodes=300, p=0,
-                                                                             training_startNodes=training_startNodes,
-                                                                             action_selector=action_selector,
-                                                                             diag_threshold=diag_threshold,
-                                                                             link_update=link_update,
-                                                                             action_mode=action_mode)
+    state_selector = [1, 3]
+    p_value = [0, 0.2, 0.4, 0.6, 0.8, 1]
+    t_value = [500, 1000, 1500, 2000, 3000, 1000]
+    actions = [8, 8, 8, 8, 4, 12]
+    '''
+    #Training section, uncomment on the server only!!!
+    for i in range(len(t_value)):
+        for s in state_selector:
+            for p in p_value:
+                filename, elapsed, reward_final, optimal_sequence = deep_Q_learning_maze(maze_filename='maze_8x8.pkl',
+                                                                                     time_samples=t_value[i], num_episodes=2000, p=p,
+                                                                                     total_actions=actions[i],
+                                                                                     training_startNodes=training_startNodes,
+                                                                                     action_selector=action_selector,
+                                                                                     diag_threshold=diag_threshold,
+                                                                                     link_update=link_update,
+                                                                                     action_mode=action_mode,
+                                                                                     state_selector=s,
+                                                                                     )
 
     print('Variables saved in', ''.join((filename, '.pkl')))
     print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
     print("Elapsed time", elapsed, "sec.\n")
-    with open(os.path.join('simulations', filename + '.pkl'), 'rb') as f:
+    '''
+
+    # This section prints the results of a trained agent at different p
+    filename = ['P00', 'P02', 'P04', 'P06', 'P08', 'P10']
+    final_trained = []
+    final_untrained = []
+    for p in filename:
+        with open(os.path.join('new_simulations', 'deep_Q_learning_maze_ST1_A8_T1000_' + p + '.pkl'), 'rb') as f:
+            [episode_transfer_to_sink, env, steps_done, maze_filename, p, time_samples, total_actions,
+             num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
+             replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink] = pickle.load(f)
+            final_trained.append(reward_final)
+            final_untrained.append(reward_no_actions)
+    plt.plot(final_trained, label='Trained Agent')
+    plt.plot(final_untrained,  label='No Actions')
+    plt.legend()
+    plt.show()
+    #print(reward_no_actions)
+    #print(reward_final)
+
+    #This section prints one training
+    with open(os.path.join('new_simulations', 'deep_Q_learning_maze_ST1_A8_T1000_P02.pkl'), 'rb') as f:
         [episode_transfer_to_sink, env, steps_done, maze_filename, p, time_samples, total_actions,
          num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
          replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink] = pickle.load(f)
@@ -472,16 +507,3 @@ if __name__ == '__main__':
                    constants=constants,
                    legend_labels=legend_labels
                    )
-
-    # load test
-    fileToLoad = os.path.join('simulations', filename + '_policy_net.pt')
-    env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=None, sinkerNode=None,
-                   p=p, sink_rate=1, time_samples=time_samples, changeable_links=None,
-                   total_actions=total_actions, done_threshold=0.95)
-    if action_selector == 'threshold_mask':
-        target_net = DQN(len(env.state), env.action_space.n, env=env, diag_threshold=diag_threshold).to('cpu')
-    elif action_selector == 'probability_mask':
-        target_net = DQN(len(env.state), env.action_space.n, env=env, diag_threshold=diag_threshold).to('cpu')
-    else:
-        target_net = DQN(len(env.state), env.action_space.n).to('cpu')
-    target_net.load_state_dict(torch.load(fileToLoad, map_location='cpu'))
