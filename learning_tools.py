@@ -158,7 +158,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
     def select_action(state, eps_threshold, net=policy_net, noAction_probability=0.05):
         sample = random.random()
-        if sample > eps_threshold:
+        if sample > eps_threshold:  # choose action from network
             with torch.no_grad():
                 return net(state).max(1)[1].view(1, 1)
         else:
@@ -290,6 +290,8 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     steps_done = 0
     for i_episode in range(num_episodes):
         episode_reward_startNode = [0] * len(training_startNodes)
+        eps_threshold = eps_end + (eps_start - eps_end) * math.exp(-1. * steps_done / eps_decay)
+        steps_done += 1
         for id_startNode, startNode_tmp in enumerate(training_startNodes):
             # Initialize the environment and state
             env.initial_maze.startNode = startNode_tmp
@@ -298,8 +300,6 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             episode_reward = 0
             for t in range(total_actions):
                 # Select and perform an action
-                eps_threshold = eps_end + (eps_start - eps_end) * math.exp(-1. * steps_done / eps_decay)
-                steps_done += 1
                 action = select_action(state, eps_threshold)
                 next_state, reward, done, _ = env.step(action.item())
                 reward = torch.tensor([reward], device=device)
@@ -446,6 +446,10 @@ if __name__ == '__main__':
         [episode_transfer_to_sink, env, steps_done, maze_filename, p, time_samples, total_actions,
          num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
          replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink] = pickle.load(f)
+    # with open(os.path.join('data', 'deep_Q_learning_maze_ST1_A8_T5000_P00_E2000_(2)' + '.pkl'), 'rb') as f:
+    #     [episode_transfer_to_sink, steps_done, maze_filename, p, time_samples, total_actions,
+    #      num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
+    #      replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink] = pickle.load(f)
 
     legend_labels=[]
     if len(training_startNodes) > 1:
