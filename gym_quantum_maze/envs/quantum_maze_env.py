@@ -96,18 +96,39 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
     @property
     def state(self):
         density_matrix = self.quantum_state.full()
-        if self.state_selector == 1:
-            state = [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)] #+ \
-                    #[self.actions_taken / self.total_actions]
-        elif self.state_selector == 2:
+        if self.state_selector == 1:  # diagonal of quantum state
+            state = [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)]
+
+        elif self.state_selector == 2:  # adjacency matrix and time instant
             state = [self.maze.get_link(link) for link in self.changeable_links] + \
-               [self.actions_taken / self.total_actions]
-        else:
+               [self.actions_taken / self.total_actions] # action_taken is normalized. Note that this definition has a list of mixed types
+
+        elif self.state_selector == 3:  # full quantum state
             state = [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)] + \
-               [func(density_matrix[m, n]) for m in range(self.quantum_system_size)
-                for n in range(m + 1, self.quantum_system_size)
-                for func in (lambda x: np.real(x), lambda x: np.imag(x))]
-            # action_taken is normalized. Note that this definition has a list of mixed types
+                   [func(density_matrix[m, n]) for m in range(self.quantum_system_size)
+                    for n in range(m + 1, self.quantum_system_size)
+                    for func in (lambda x: np.real(x), lambda x: np.imag(x))]
+
+        elif self.state_selector == 4:  # full quantum state and time instant
+            state = [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)] + \
+                    [func(density_matrix[m, n]) for m in range(self.quantum_system_size)
+                     for n in range(m + 1, self.quantum_system_size)
+                     for func in (lambda x: np.real(x), lambda x: np.imag(x))] + \
+                    [self.actions_taken / self.total_actions]
+
+        elif self.state_selector == 5:  # full quantum state and adjacency matrix
+            state = [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)] + \
+                    [func(density_matrix[m, n]) for m in range(self.quantum_system_size)
+                     for n in range(m + 1, self.quantum_system_size)
+                     for func in (lambda x: np.real(x), lambda x: np.imag(x))]
+
+        else:  # full quantum state, adjacency matrix and time instant
+            state = [np.real(density_matrix[n, n]) for n in range(self.quantum_system_size)] + \
+            [func(density_matrix[m, n]) for m in range(self.quantum_system_size)
+             for n in range(m + 1, self.quantum_system_size)
+             for func in (lambda x: np.real(x), lambda x: np.imag(x))] + \
+            [self.maze.get_link(link) for link in self.changeable_links] + \
+            [self.actions_taken / self.total_actions]
         return state
 
 

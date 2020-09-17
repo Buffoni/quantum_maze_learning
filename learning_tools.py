@@ -168,11 +168,29 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
 
     def select_action(state, eps_threshold, net=policy_net, noAction_probability=0.05):
         sample = random.random()
-        if sample > eps_threshold:
-            with torch.no_grad():
-                return net(state).max(1)[1].view(1, 1)
-        else:
-            if action_selector == 'threshold_mask':
+        if action_selector == 'threshold_mask':
+            mask = set()
+            for n in range(env.quantum_system_size - 1):
+                if env.quantum_state.full()[n, n] >= diag_threshold:
+                    nx, ny = env.maze.node2xy(n)
+                    if nx > 0:
+                        mask.add(env.maze.xy2link(nx - 1, ny))
+                    if nx < env.maze.width:
+                        mask.add(env.maze.xy2link(nx + 1, ny))
+                    if ny > 0:
+                        mask.add(env.maze.xy2link(nx, ny - 1))
+                    if ny < env.maze.height:
+                        mask.add(env.maze.xy2link(nx, ny + 1))
+            if sample > eps_threshold:  # choose action from network
+                with torch.no_grad():
+                    masked_tensor = torch.tensor(list(mask))
+                    a_max = net(state)[0, masked_tensor].max(0)
+                    return torch.tensor([[masked_tensor[a_max[1]]]], device=device, dtype=torch.long)
+                    # check print(net(state)[0,masked_tensor[a_max[1]]])
+            else:  # choose random action from masked ones by threshold
+                return torch.tensor([[random.choice(tuple(mask))]], device=device, dtype=torch.long)
+        elif action_selector == 'probability_mask':
+            if sample > eps_threshold:  # choose action from network
                 mask = set()
                 for n in range(env.quantum_system_size - 1):
                     if env.quantum_state.full()[n, n] >= diag_threshold:
@@ -185,8 +203,11 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
                             mask.add(env.maze.xy2link(nx, ny - 1))
                         if ny < env.maze.height:
                             mask.add(env.maze.xy2link(nx, ny + 1))
-                return torch.tensor([[random.choice(tuple(mask))]], device=device, dtype=torch.long)
-            elif action_selector == 'probability_mask':
+                with torch.no_grad():
+                    masked_tensor = torch.tensor(list(mask))
+                    a_max = net(state)[0, masked_tensor].max(0)
+                    return torch.tensor([[masked_tensor[a_max[1]]]], device=device, dtype=torch.long)
+            else:  # choose random action from masked ones by population
                 # note that in this way you always define a valid action, action=0 (noAction) is never selected
                 population = np.real(np.diag(env.quantum_state.full())[:env.quantum_system_size - 1])
                 if population.min() < 0:
@@ -216,6 +237,10 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
                 else:
                     selected_link = 0
                 return torch.tensor([[selected_link]], device=device, dtype=torch.long)
+        else:  # any actions
+            if sample > eps_threshold:  # choose action from network
+                with torch.no_grad():
+                    return net(state).max(1)[1].view(1, 1)
             else:
                 return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
 
@@ -295,6 +320,32 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
                 break
 
         return episode_reward, sequence
+
+    # Pre-Training loop: store in replay memory a number of episodes equal to batch_size
+    for i_episode in range(batch_size):
+        eps_threshold = 2
+        for id_startNode, startNode_tmp in enumerate(training_startNodes):
+            # Initialize the environment and state
+            env.initial_maze.startNode = startNode_tmp
+            env.reset()
+            state = torch.tensor(env.state, device=device).unsqueeze(0)
+            episode_reward = 0
+            for t in range(total_actions):
+                # Select and perform an action
+                action = select_action(state, eps_threshold)
+                next_state, reward, done, _ = env.step(action.item())
+                reward = torch.tensor([reward], device=device)
+                episode_reward = reward + gamma * episode_reward
+                if done:
+                    next_state = None
+                else:
+                    next_state = torch.tensor(next_state, device=device).unsqueeze(0)
+                # Store the transition in memory
+                memory.push(state, action, next_state, reward)
+                # Move to the next state
+                state = next_state
+                if done:
+                    break
 
     # Training loop
     steps_done = 0
@@ -461,11 +512,11 @@ if __name__ == '__main__':
 
     baseConfig = {
         'training_startNodes': [],
-        'action_selector': 'probability_mask',  # None, 'threshold_mask', 'probability_mask'
+        'action_selector': 'None',  # None, 'threshold_mask', 'probability_mask'
         'diag_threshold': 10 ** (-4),
         'link_update': 0.1,
         'action_mode': 'reverse',  # 'reverse', 'sum', 'subtract'
-        'num_episodes': 2000,
+        'num_episodes': 25,
         'base_path': os.getcwd(),
         'maze_filename': 'maze_8x8.pkl',
     }
@@ -513,15 +564,20 @@ if __name__ == '__main__':
     #print(reward_final)
 
     #This section prints one training
-    with open(os.path.join('new_simulations', 'deep_Q_learning_maze_ST1_A8_T1000_P02.pkl'), 'rb') as f:
+    with open(os.path.join('simulations', filename + '.pkl'), 'rb') as f:
         [episode_transfer_to_sink, env, steps_done, maze_filename, p, time_samples, total_actions,
          num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
          replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink] = pickle.load(f)
+    # # with open(os.path.join('data', 'deep_Q_learning_maze_ST1_A8_T5000_P00_E2000_(2)' + '.pkl'), 'rb') as f:
+    # #     [episode_transfer_to_sink, steps_done, maze_filename, p, time_samples, total_actions,
+    # #      num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
+    # #      replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink] = pickle.load(f)
 
     legend_labels=[]
     if len(baseConfig['training_startNodes']) > 1:
         episode_transfer = [episode_transfer_to_sink[k::len(baseConfig['training_startNodes'])] for k in
                             range(len(baseConfig['training_startNodes']))]
+
         episode_transfer.append(
             [sum(episode_transfer_to_sink[k * len(baseConfig['training_startNodes']):(k + 1) * len(baseConfig['training_startNodes'])])
              / len(baseConfig['training_startNodes']) for k in range(num_episodes)])
@@ -539,3 +595,16 @@ if __name__ == '__main__':
                    constants=constants,
                    legend_labels=legend_labels
                    )
+
+    # load test
+    fileToLoad = os.path.join('simulations', filename + '_policy_net.pt')
+    env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=None, sinkerNode=None,
+                   p=p, sink_rate=1, time_samples=time_samples, changeable_links=None,
+                   total_actions=total_actions, done_threshold=0.95)
+    if baseConfig['action_selector'] == 'threshold_mask':
+        target_net = DQN(len(env.state), env.action_space.n, env=env, diag_threshold=baseConfig['diag_threshold']).to('cpu')
+    elif baseConfig['action_selector'] == 'probability_mask':
+        target_net = DQN(len(env.state), env.action_space.n, env=env, diag_threshold=baseConfig['diag_threshold']).to('cpu')
+    else:
+        target_net = DQN(len(env.state), env.action_space.n).to('cpu')
+    target_net.load_state_dict(torch.load(fileToLoad, map_location='cpu'))
