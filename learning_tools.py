@@ -494,15 +494,16 @@ def createLauncher(baseConf):
     def tuneLauncher(conf):
         deep_Q_learning_maze(base_path=baseConf['base_path'],
                              maze_filename=baseConf['maze_filename'],
-                             time_samples=conf['t_value-actions'][0],
-                             num_episodes=baseConfig['num_episodes'], p=conf['p_value'],
-                             total_actions=conf['t_value-actions'][1],
+                             time_samples=baseConf['time_samples'],
+                             num_episodes=baseConfig['num_episodes'],
+                             p=conf['p_value'],
+                             total_actions=baseConf['total_actions'],
                              training_startNodes=baseConf['training_startNodes'],
                              action_selector=baseConf['action_selector'],
                              diag_threshold=baseConf['diag_threshold'],
                              link_update=baseConf['link_update'],
                              action_mode=baseConf['action_mode'],
-                             state_selector=conf['state_selector'],
+                             state_selector=baseConf['state_selector'],
                              )
 
     return tuneLauncher
@@ -519,12 +520,13 @@ if __name__ == '__main__':
         'num_episodes': 25,
         'base_path': os.getcwd(),
         'maze_filename': 'maze_8x8.pkl',
+        'state_selector': 3,
+        'time_samples': 100,
+        'total_actions': 4,
     }
 
     parallelConfig = {
-        'state_selector': tune.grid_search([1, 3]),
         'p_value': tune.grid_search([0, 0.2, 0.4, 0.6, 0.8, 1]),
-        't_value-actions': tune.grid_search([(500, 8), (1000, 8), (1500, 8), (2000, 8), (3000, 4), (1000, 12)]),
     }
 
     trialResources = {'cpu': 1./10, 'gpu': 1./10}
@@ -532,10 +534,12 @@ if __name__ == '__main__':
     #Debug
     #ray.init(local_mode=True)
 
-    '''
     #Training section, uncomment on the server only!!!
     today = datetime.datetime.now()
-    analysis = tune.run(createLauncher(baseConfig), config=parallelConfig,
+    asha_scheduler = ray.tune.schedulers.ASHAScheduler(metric='episode_reward', mode='max',
+        time_attr='training_iteration', max_t=100, grace_period=10, reduction_factor=3, brackets=1)
+
+    analysis = tune.run(createLauncher(baseConfig), scheduler=asha_scheduler, config=parallelConfig,
                         resources_per_trial=trialResources, local_dir='tuneOutput')
     print("BEST PARAMETERS")
     print(analysis.get_best_config(metric="episode_reward"))
@@ -543,7 +547,7 @@ if __name__ == '__main__':
 
     import sys
     sys.exit()
-    '''
+
 
     # This section prints the results of a trained agent at different p
     filename = ['P00', 'P02', 'P04', 'P06', 'P08', 'P10']
