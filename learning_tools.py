@@ -183,7 +183,7 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
                         mask.add(env.maze.xy2link(nx, ny + 1))
             if sample > eps_threshold:  # choose action from network
                 with torch.no_grad():
-                    masked_tensor = torch.tensor(list(mask))
+                    masked_tensor = torch.tensor(list(mask), dtype=torch.long)
                     a_max = net(state)[0, masked_tensor].max(0)
                     return torch.tensor([[masked_tensor[a_max[1]]]], device=device, dtype=torch.long)
                     # check print(net(state)[0,masked_tensor[a_max[1]]])
@@ -204,7 +204,7 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
                         if ny < env.maze.height:
                             mask.add(env.maze.xy2link(nx, ny + 1))
                 with torch.no_grad():
-                    masked_tensor = torch.tensor(list(mask))
+                    masked_tensor = torch.tensor(list(mask), dtype=torch.long)
                     a_max = net(state)[0, masked_tensor].max(0)
                     return torch.tensor([[masked_tensor[a_max[1]]]], device=device, dtype=torch.long)
             else:  # choose random action from masked ones by population
@@ -305,7 +305,7 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
                 action = sequence[t]
 
             next_state, reward, done, _ = env.step(action)
-            # reward = reward.to(device='cpu') #torch.tensor([reward], device=device)
+            # reward = reward.to(device='cpu') #torch.tensor([reward], device=device, dtype=torch.float32)
             episode_reward = reward + gamma * episode_reward
 
             if done:
@@ -328,18 +328,18 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
             # Initialize the environment and state
             env.initial_maze.startNode = startNode_tmp
             env.reset()
-            state = torch.tensor(env.state, device=device).unsqueeze(0)
+            state = torch.tensor(env.state, device=device, dtype=torch.float32).unsqueeze(0)
             episode_reward = 0
             for t in range(total_actions):
                 # Select and perform an action
                 action = select_action(state, eps_threshold)
                 next_state, reward, done, _ = env.step(action.item())
-                reward = torch.tensor([reward], device=device)
+                reward = torch.tensor([reward], device=device, dtype=torch.float32)
                 episode_reward = reward + gamma * episode_reward
                 if done:
                     next_state = None
                 else:
-                    next_state = torch.tensor(next_state, device=device).unsqueeze(0)
+                    next_state = torch.tensor(next_state, device=device, dtype=torch.float32).unsqueeze(0)
                 # Store the transition in memory
                 memory.push(state, action, next_state, reward)
                 # Move to the next state
@@ -363,7 +363,7 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
                 # Select and perform an action
                 action = select_action(state, eps_threshold)
                 next_state, reward, done, _ = env.step(action.item())
-                reward = torch.tensor([reward], device=device)
+                reward = torch.tensor([reward], device=device, dtype=torch.float32)
                 episode_reward = reward + gamma * episode_reward
 
                 if done:
@@ -460,7 +460,7 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
 
     for (i, transfer_to_sink) in enumerate(episode_transfer_to_sink):
         # transfer_to_sink_t = torch.cat(transfer_to_sink)
-        transfer_to_sink_t = torch.tensor(transfer_to_sink, dtype=torch.float)
+        transfer_to_sink_t = torch.tensor(transfer_to_sink, dtype=torch.float32)
         transfer_to_sink_len = len(transfer_to_sink_t)
         plt.plot(transfer_to_sink_t.numpy())
         # Take 100 episode averages and plot them too
@@ -529,18 +529,26 @@ if __name__ == '__main__':
         'p_value': tune.grid_search([0, 0.2, 0.4, 0.6, 0.8, 1]),
     }
 
-    trialResources = {'cpu': 1./10, 'gpu': 1./10}
+    scheduler = 'gridSearch'  # 'gridSearch', 'asha'
+    trialResources = {'cpu': 1., 'gpu': 1./10}
 
     #Debug
     #ray.init(local_mode=True)
 
     #Training section, uncomment on the server only!!!
     today = datetime.datetime.now()
-    asha_scheduler = ray.tune.schedulers.ASHAScheduler(metric='episode_reward', mode='max',
-        time_attr='training_iteration', max_t=100, grace_period=10, reduction_factor=3, brackets=1)
+    if scheduler == 'asha':
+        asha_scheduler = ray.tune.schedulers.ASHAScheduler(metric='episode_reward', mode='max',
+            time_attr='training_iteration', max_t=100, grace_period=10, reduction_factor=3, brackets=1)
 
-    analysis = tune.run(createLauncher(baseConfig), scheduler=asha_scheduler, config=parallelConfig,
+        analysis = tune.run(createLauncher(baseConfig), scheduler=asha_scheduler, config=parallelConfig,
                         resources_per_trial=trialResources, local_dir='tuneOutput')
+    elif scheduler == 'gridSearch':
+        analysis = tune.run(createLauncher(baseConfig), config=parallelConfig,
+                            resources_per_trial=trialResources, local_dir='tuneOutput')
+    else:
+        raise ValueError("Scheduler {} not valid.".format(scheduler))
+
     print("BEST PARAMETERS")
     print(analysis.get_best_config(metric="episode_reward"))
     analysis.dataframe().to_pickle('tuneOutput/'+today.strftime('%Y-%m-%d_%H-%M-%S')+'-tuneAnalysis.p')
