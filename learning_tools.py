@@ -531,7 +531,7 @@ def createLauncher(baseConf):
                              diag_threshold=baseConf['diag_threshold'],
                              link_update=baseConf['link_update'],
                              action_mode=baseConf['action_mode'],
-                             state_selector=baseConf['state_selector'],
+                             state_selector=conf['state_selector'],
                              )
 
     return tuneLauncher
@@ -548,7 +548,6 @@ if __name__ == '__main__':
         'num_episodes': 2000,
         'base_path': os.getcwd(),
         'maze_filename': 'maze_8x8.pkl',
-        'state_selector': 3,
         'time_samples': 100,
         'total_actions': 4,
         'total_steps': 10000,
@@ -556,10 +555,11 @@ if __name__ == '__main__':
 
     parallelConfig = {
         'p_value': tune.grid_search([0, 0.2, 0.4, 0.6, 0.8, 1]),
+        'state_selector': tune.grid_search([1, 3]),
     }
 
     scheduler = 'gridSearch'  # 'gridSearch', 'asha'
-    trialResources = {'cpu': 1., 'gpu': 1./10}
+    trialResources = {'cpu': 2., 'gpu': 1./13}
 
     #Debug
     #ray.init(local_mode=True)
