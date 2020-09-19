@@ -98,7 +98,7 @@ class DQN(nn.Module):
         return F.normalize(x*mask)
 
 # deep_Q_learning
-def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples=100, total_actions=4,
+def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples=100, total_actions=4, total_steps=1000,
                          num_episodes=100, changeable_links=None,  # [4, 15, 30, 84],
                          batch_size=128, gamma=0.999, eps_start=0.9, eps_end=0.05,
                          eps_decay=1000, target_update=10, replay_capacity=512,
@@ -294,19 +294,19 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
 
         env.reset()
         state = torch.tensor(env.state, device=device, dtype=torch.float32).unsqueeze(0)
-        episode_reward = 0
-        for t in range(total_actions):
-            # Select and perform an action
-            if evaluate_optimal_action:
-                eps_threshold = -1
-                action = select_action(state, eps_threshold, target_net).item()
-                sequence[t] = action
-            else:
-                action = sequence[t]
+        for t in range(total_steps):
+            if t < total_actions: #for the first total_actions,
+                # Select and perform an action
+                if evaluate_optimal_action:
+                    eps_threshold = -1
+                    action = select_action(state, eps_threshold, target_net).item()
+                    sequence[t] = action
+                else:
+                    action = sequence[t]
+            else: #after total_actions actions, performs no actions
+                action = 0
 
-            next_state, reward, done, _ = env.step(action)
-            # reward = reward.to(device='cpu') #torch.tensor([reward], device=device, dtype=torch.float32)
-            episode_reward = reward + gamma * episode_reward
+            next_state, done, _ = env.step(action)
 
             if done:
                 next_state = None
@@ -319,6 +319,8 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
             if done:
                 break
 
+        episode_reward = total_steps - t
+
         return episode_reward, sequence
 
     # Pre-Training loop: store in replay memory a number of episodes equal to batch_size
@@ -329,23 +331,36 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
             env.initial_maze.startNode = startNode_tmp
             env.reset()
             state = torch.tensor(env.state, device=device, dtype=torch.float32).unsqueeze(0)
-            episode_reward = 0
-            for t in range(total_actions):
-                # Select and perform an action
-                action = select_action(state, eps_threshold)
-                next_state, reward, done, _ = env.step(action.item())
-                reward = torch.tensor([reward], device=device, dtype=torch.float32)
-                episode_reward = reward + gamma * episode_reward
+            episode_states = []
+            episode_nextStates = []
+            episode_actions = []
+            for t in range(total_steps):
+                if t < total_actions:  # for the first total_actions,
+                    # Select and perform an action
+                    action = select_action(state, eps_threshold)
+                    actionItem = action.item()
+                else:  # after total_actions actions, performs no actions
+                    actionItem = 0
+                next_state, done, _ = env.step(actionItem)
+
                 if done:
                     next_state = None
                 else:
                     next_state = torch.tensor(next_state, device=device, dtype=torch.float32).unsqueeze(0)
-                # Store the transition in memory
-                memory.push(state, action, next_state, reward)
+
+                if t < total_actions:  # for the first total_actions,
+                    #to store the transitions in memory after the calculation of episode reward
+                    episode_states.append(state)
+                    episode_actions.append(action)
+                    episode_nextStates.append(next_state)
                 # Move to the next state
                 state = next_state
                 if done:
                     break
+            episode_reward = total_steps - t
+            # Store the transitions in memory
+            for i in range(total_actions):
+                memory.push(episode_states[i], episode_actions[i], episode_nextStates[i], episode_reward)
 
     # Training loop
     steps_done = 0
@@ -358,21 +373,28 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
             env.initial_maze.startNode = startNode_tmp
             env.reset()
             state = torch.tensor(env.state, device=device, dtype=torch.float32).unsqueeze(0)
-            episode_reward = 0
-            for t in range(total_actions):
-                # Select and perform an action
-                action = select_action(state, eps_threshold)
-                next_state, reward, done, _ = env.step(action.item())
-                reward = torch.tensor([reward], device=device, dtype=torch.float32)
-                episode_reward = reward + gamma * episode_reward
+            episode_states = []
+            episode_nextStates = []
+            episode_actions = []
+            for t in range(total_steps):
+                if t < total_actions:  # for the first total_actions,
+                    # Select and perform an action
+                    action = select_action(state, eps_threshold)
+                    actionItem = action.item()
+                else:  # after total_actions actions, performs no actions
+                    actionItem = 0
+                next_state, done, _ = env.step(actionItem)
 
                 if done:
                     next_state = None
                 else:
                     next_state = torch.tensor(next_state, device=device, dtype=torch.float32).unsqueeze(0)
 
-                # Store the transition in memory
-                memory.push(state, action, next_state, reward)
+                if t < total_actions:  # for the first total_actions,
+                    # to store the transitions in memory after the calculation of episode reward
+                    episode_states.append(state)
+                    episode_actions.append(action)
+                    episode_nextStates.append(next_state)
 
                 # Move to the next state
                 state = next_state
@@ -381,6 +403,11 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
 
                 if done:
                     break
+
+            episode_reward = total_steps - t
+            # Store the transitions in memory
+            for i in range(total_actions):
+                memory.push(episode_states[i], episode_actions[i], episode_nextStates[i], episode_reward)
 
             # Perform one step of the optimization (on the target network)
             optimize_model()
@@ -498,6 +525,7 @@ def createLauncher(baseConf):
                              num_episodes=baseConfig['num_episodes'],
                              p=conf['p_value'],
                              total_actions=baseConf['total_actions'],
+                             total_steps=baseConf['total_steps'],
                              training_startNodes=baseConf['training_startNodes'],
                              action_selector=baseConf['action_selector'],
                              diag_threshold=baseConf['diag_threshold'],
@@ -517,12 +545,13 @@ if __name__ == '__main__':
         'diag_threshold': 10 ** (-4),
         'link_update': 0.1,
         'action_mode': 'reverse',  # 'reverse', 'sum', 'subtract'
-        'num_episodes': 25,
+        'num_episodes': 2000,
         'base_path': os.getcwd(),
         'maze_filename': 'maze_8x8.pkl',
         'state_selector': 3,
         'time_samples': 100,
         'total_actions': 4,
+        'total_steps': 1000,
     }
 
     parallelConfig = {

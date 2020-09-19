@@ -204,15 +204,16 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
                                         self.initial_maze.sinkerNode, self.p, self.time_samples, self.sink_rate, self.dt)
 
         # reward defined as how much gets to the sink in the current state transition
-        sink = self.quantum_system_size - 1
-        reward = np.real(new_quantum_state.full()[sink, sink]) - np.real(self.quantum_state.full()[sink, sink])
+        #sink = self.quantum_system_size - 1
+        #reward = np.real(new_quantum_state.full()[sink, sink]) - np.real(self.quantum_state.full()[sink, sink])
 
         # update quantum state
         self.quantum_state = new_quantum_state
 
         self.state = (self.quantum_state, self.maze, self.actions_taken)
 
-        return self.state, reward, self.is_done(), {}
+        #return self.state, reward, self.is_done(), {}
+        return self.state, self.is_done(), {}
 
     def render(self, show_nodes=False, show_links=False, show_ticks=False, color_map='CMRmap_r'):
         """Renders the environment.
