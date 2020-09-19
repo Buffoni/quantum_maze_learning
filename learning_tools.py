@@ -98,7 +98,7 @@ class DQN(nn.Module):
         return F.normalize(x*mask)
 
 # deep_Q_learning
-def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples=100, total_actions=4, total_steps=1000,
+def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, dt=1e-2, time_samples=100, total_actions=4, total_steps=1000,
                          num_episodes=100, changeable_links=None,  # [4, 15, 30, 84],
                          batch_size=128, gamma=0.999, eps_start=0.9, eps_end=0.05,
                          eps_decay=1000, target_update=10, replay_capacity=512,
@@ -122,13 +122,13 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
     # env = gym.make('quantum-maze-v0', maze_filename=os.path.join(base_path, maze_filename), startNode=startNode, sinkerNode=sinkerNode,
     #                p=p, sink_rate=1, time_samples=time_samples, changeable_links=changeable_links,
     #                total_actions=total_actions, done_threshold=0.95, link_update=link_update, action_mode=action_mode,
-    #                state_selector=state_selector)
+    #                state_selector=state_selector, dt=dt)
 
     env = quantum_maze_env.QuantumMazeEnv(maze_filename=os.path.join(base_path, maze_filename), startNode=startNode,
                    sinkerNode=sinkerNode,
                    p=p, sink_rate=1, time_samples=time_samples, changeable_links=changeable_links,
                    total_actions=total_actions, done_threshold=0.95, link_update=link_update, action_mode=action_mode,
-                   state_selector=state_selector)
+                   state_selector=state_selector, dt=dt)
 
     if startNode is None:
         startNode = env.initial_maze.startNode
@@ -319,7 +319,7 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
             if done:
                 break
 
-        episode_reward = torch.tensor([total_steps - t], device=device, dtype=torch.float32)
+        episode_reward = torch.tensor([total_steps - (t+1)], device=device, dtype=torch.float32)
 
         return episode_reward, sequence
 
@@ -357,9 +357,9 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
                 state = next_state
                 if done:
                     break
-            episode_reward = torch.tensor([total_steps - t], device=device, dtype=torch.float32)
+            episode_reward = torch.tensor([total_steps - (t+1)], device=device, dtype=torch.float32)
             # Store the transitions in memory
-            for i in range(total_actions):
+            for i in range(len(episode_actions)):
                 memory.push(episode_states[i], episode_actions[i], episode_nextStates[i], episode_reward)
 
     # Training loop
@@ -404,9 +404,9 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
                 if done:
                     break
 
-            episode_reward = torch.tensor([total_steps - t], device=device, dtype=torch.float32)
+            episode_reward = torch.tensor([total_steps - (t+1)], device=device, dtype=torch.float32)
             # Store the transitions in memory
-            for i in range(total_actions):
+            for i in range(len(episode_actions)):
                 memory.push(episode_states[i], episode_actions[i], episode_nextStates[i], episode_reward)
 
             # Perform one step of the optimization (on the target network)
@@ -521,6 +521,7 @@ def createLauncher(baseConf):
     def tuneLauncher(conf):
         deep_Q_learning_maze(base_path=baseConf['base_path'],
                              maze_filename=baseConf['maze_filename'],
+                             dt=baseConf['dt'],
                              time_samples=baseConf['time_samples'],
                              num_episodes=baseConfig['num_episodes'],
                              p=conf['p_value'],
@@ -548,6 +549,7 @@ if __name__ == '__main__':
         'num_episodes': 2000,
         'base_path': os.getcwd(),
         'maze_filename': 'maze_8x8.pkl',
+        'dt': 1e-2,
         'time_samples': 100,
         'total_actions': 4,
         'total_steps': 10000,
