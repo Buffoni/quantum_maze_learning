@@ -319,7 +319,7 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
             if done:
                 break
 
-        episode_reward = total_steps - t
+        episode_reward = torch.tensor([total_steps - t], device=device, dtype=torch.float32)
 
         return episode_reward, sequence
 
@@ -357,7 +357,7 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
                 state = next_state
                 if done:
                     break
-            episode_reward = total_steps - t
+            episode_reward = torch.tensor([total_steps - t], device=device, dtype=torch.float32)
             # Store the transitions in memory
             for i in range(total_actions):
                 memory.push(episode_states[i], episode_actions[i], episode_nextStates[i], episode_reward)
@@ -404,7 +404,7 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, time_samples
                 if done:
                     break
 
-            episode_reward = total_steps - t
+            episode_reward = torch.tensor([total_steps - t], device=device, dtype=torch.float32)
             # Store the transitions in memory
             for i in range(total_actions):
                 memory.push(episode_states[i], episode_actions[i], episode_nextStates[i], episode_reward)
@@ -551,7 +551,7 @@ if __name__ == '__main__':
         'state_selector': 3,
         'time_samples': 100,
         'total_actions': 4,
-        'total_steps': 1000,
+        'total_steps': 10000,
     }
 
     parallelConfig = {
