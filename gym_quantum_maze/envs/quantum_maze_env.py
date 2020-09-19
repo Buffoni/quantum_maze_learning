@@ -179,7 +179,7 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
             True if the portions of quantum state in the sink is equal or above self.done_threshold, False otherwise
         """
         return np.real(self.quantum_state.full()[self.quantum_system_size - 1, self.quantum_system_size - 1]) >= \
-               self.done_threshold or self.actions_taken == self.total_actions
+               self.done_threshold #or self.actions_taken == self.total_actions
 
     def step(self, action: int):
         """Evaluate the transition to a new state and the reward from the current state with an action.
@@ -198,7 +198,8 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
         self.do_action(action)
 
         # update number of actions
-        self.actions_taken += 1
+        if action != 0:
+            self.actions_taken += 1
 
         new_quantum_state, _ = run_maze(self.maze.adjacency, self.quantum_state,
                                         self.initial_maze.sinkerNode, self.p, self.time_samples, self.sink_rate, self.dt)
