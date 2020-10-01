@@ -18,6 +18,8 @@ import os
 import gym
 import matplotlib.pyplot as plt
 import numpy as np
+import csv
+import uuid
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -334,6 +336,8 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, dt=1e-2, tim
             episode_states = []
             episode_nextStates = []
             episode_actions = []
+            # debugFilename = "debug-{}.csv".format(uuid.uuid4())
+            # print("Created {}".format(debugFilename))
             for t in range(total_steps):
                 if t < total_actions:  # for the first total_actions,
                     # Select and perform an action
@@ -342,6 +346,9 @@ def deep_Q_learning_maze(base_path=None, maze_filename=None, p=0.1, dt=1e-2, tim
                 else:  # after total_actions actions, performs no actions
                     actionItem = 0
                 next_state, done, _ = env.step(actionItem)
+
+                # with open(debugFilename, 'a+', newline='') as debugFile:
+                #     csv.writer(debugFile).writerow(next_state)
 
                 if done:
                     next_state = None

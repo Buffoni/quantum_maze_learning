@@ -5,6 +5,10 @@ Maze class for quantum_maze_env
 
 @author: Nicola Dalla Pozza
 """
+import matplotlib
+matplotlib.use("TkAgg")
+import pandas as pd
+from matplotlib.animation import FuncAnimation
 import numpy as np
 import matplotlib.pyplot as plt
 from random import randrange, shuffle
@@ -210,6 +214,105 @@ class Maze(object):
             ax = None
 
         return img, ax
+
+    def plot_maze_animation(self, debugFilename, show_nodes=False, show_links=False, show_ticks=False, show_start_sink=False, show=True):
+        """Plot the map of the maze. White pixels (value 1) are paths while black pixels are walls.
+
+        Plots a maze with different options, such as the possibility to plot the number corresponding to each link
+        (in red) or node (in black bold) with the show_links and show_nodes option. Option startNode and
+        sinkerNode allow to insert the number of the start node or the sinker node, which are plotted in blue and in
+        red respectively.
+
+        Parameters
+        ----------
+        debugFilename : str
+            the name of the file to load for the animation without '.csv'.
+        show_nodes : bool (default False)
+            options to show the node number on the corresponding pixel in black
+        show_links : bool (default False)
+            options to show the link number on the corresponding pixel in red
+        show_ticks : bool (default False)
+            options to show the coordinate ticks in the plot
+        show : bool (default False)
+            options to show the plot or not
+
+
+        Returns
+        -------
+        numpy.ndarray, AxesImage
+            numpy array with rgb colors for each pixel, AxesImage obtained from pyplot.imshow() (when plotted)
+        """
+        maze_map = self.generate_maze_map()
+        xshift = 0.33
+        yshift = 0.33
+        cmap = plt.cm.get_cmap('gray')
+        norm = plt.Normalize(maze_map.min(), maze_map.max())
+        img = cmap(norm(maze_map))
+
+        df = pd.read_csv(debugFilename+'.csv', header=None)
+        #fig = plt.figure(figsize=(10, 10), dpi=144)
+        fig, ax = plt.subplots(figsize=(10, 10), dpi=144)
+
+        ims = plt.imshow(img, origin='lower')
+
+        calcValue = lambda v: max(v, 0.)**(1/3) #sometimes vs[j] slightly less than 0, besides values are near 0
+
+        def animate(i):
+            print("Calculate step {}".format(i))
+            s = df.loc[i]
+            ns = s.index[:-1] #without sink
+            vs = s.values[:-1]
+
+            for j,n in enumerate(ns):
+                x, y = self.node2xy(n)
+                #print("{} - {}x{} - {}".format(n, x, y, vs[j]))
+
+                if show_start_sink:
+                    if self.startNode is not None and n == self.startNode:
+                        img[y, x, :] = 0., 0., 1., calcValue(vs[j])
+                        # plt.text(x - xshift, y - yshift, str(self.startNode), fontweight='bold') # always print startNode
+
+                    elif self.sinkerNode is not None and n == self.sinkerNode:
+                        img[y, x, :] = 1., 0., 0., calcValue(vs[j])
+                        # plt.text(x - xshift, y - yshift, str(self.sinkerNode), fontweight='bold') # always print sinkerNode
+
+                    else:
+                        img[y, x, :] = 0., 1., 0., calcValue(vs[j])
+                else:
+                    img[y, x, :] = 0., 1., 0., calcValue(vs[j])
+
+            if show_nodes:
+                for n in range(self.height * self.width):
+                    x, y = self.node2xy(n)
+                    plt.text(x - xshift, y - yshift, str(n), fontweight='bold')
+
+            if show_links:
+                for n in range(1, (self.height - 1) * self.width + (self.width - 1) * self.height + 1):
+                    x, y = self.link2xy(n)
+                    plt.text(x, y - yshift, str(n), style='italic', color='red')
+
+            if show_ticks:
+                plt.xticks(np.arange(0, img.shape[1], step=4),
+                           np.arange(0, (img.shape[1] - 1) / 2, step=2, dtype='int'))
+                plt.yticks(np.arange(0, img.shape[0], step=4),
+                           np.arange(0, (img.shape[0] - 1) / 2, step=2, dtype='int'))
+            else:
+                plt.xticks([])
+                plt.yticks([])
+
+            ims.set_array(img)
+            ax.set_title(f'Step - {i+1}', fontsize='smaller')
+
+            return [ims]
+
+        ani = FuncAnimation(fig=fig, func=animate, frames=len(df), interval=500, repeat=True)
+
+        if show:
+            plt.show()
+        else:
+            ani.save(debugFilename+'.mp4')
+
+        return img, ims
 
     def set_link(self, link=None, value=None):
         """Set the value of a link in the maze.
@@ -465,11 +568,16 @@ class Maze(object):
 if __name__ == "__main__":
     print('maze_tools has started')
     # maze_tools test
-    myMaze = Maze(maze_size=(8, 8))
-    myMaze.plot_maze(show_nodes=False, show_links=False)
-    myMaze.save('maze_8x8')
+    # myMaze = Maze(maze_size=(8, 8))
+    # myMaze.plot_maze(show_nodes=False, show_links=False)
+    # myMaze.save('maze_8x8')
     # myMaze = None
     myMaze2 = Maze().load('maze_8x8')
-    myMaze2.plot_maze(show_nodes=False, show_links=False)
+    #myMaze2.plot_maze(show_nodes=True, show_links=True)
+    debugFilename = 'debug-dt1-p0'
+    #debugFilename = 'debug-dt1-p0.001'
+    #debugFilename = 'debug-dt0.01-p0'
+    #debugFilename = 'debug-dt0.01-p0.001'
+    myMaze2.plot_maze_animation(debugFilename, show_nodes=True, show_links=False, show=False)
     # comparison test between myMaze and myMaze2
-    np.all([np.all(myMaze.__dict__[x] == myMaze2.__dict__[x]) for x in myMaze.__dict__.keys()])
+    # np.all([np.all(myMaze.__dict__[x] == myMaze2.__dict__[x]) for x in myMaze.__dict__.keys()])
