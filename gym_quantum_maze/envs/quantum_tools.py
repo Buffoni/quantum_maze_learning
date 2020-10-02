@@ -6,6 +6,7 @@ Methods on quantum evolution for quantum_maze_env
 @author: Nicola Dalla Pozza
 """
 import time
+import math
 from qutip import *
 from gym_quantum_maze.envs.maze_tools import *
 
@@ -48,10 +49,17 @@ def run_maze(adjacency_matrix, initial_quantum_state, sinkerNode, p, timeSamples
     S = np.zeros([N + 1, N + 1])  # transition matrix to the sink
     S[N, sinkerNode] = np.sqrt(2 * sink_rate)
 
-    H = Qobj((1 - p) * np.pad(adjacency_matrix, [(0, 1), (0, 1)], 'constant'))
-    # add zero padding to account for the sink and multiply for (1-p)
-    L = [np.sqrt(p * T[i, j]) * (basis(N + 1, i) * basis(N + 1, j).dag())
-         for i in range(N) for j in range(N) if T[i, j] > 0]  # set of Lindblad operators
+    if math.isclose(p, 1):
+        H = Qobj(0 * np.pad(adjacency_matrix, [(0, 1), (0, 1)], 'constant'))
+        # Qobj(np.zeros((N+1, N+1))) seems slower
+    else:
+        H = Qobj((1 - p) * np.pad(adjacency_matrix, [(0, 1), (0, 1)], 'constant'))
+        # add zero padding to account for the sink and multiply for (1-p)
+    if math.isclose(p, 0):
+        L = []
+    else:
+        L = [np.sqrt(p * T[i, j]) * (basis(N + 1, i) * basis(N + 1, j).dag())
+             for i in range(N) for j in range(N) if T[i, j] > 0]  # set of Lindblad operators
     L.append(Qobj(S))  # add the sink transfer
 
     obs = [basis(N + 1, sinkerNode) * basis(N + 1, sinkerNode).dag()]  # site that we want to observe obs=|N><N|
@@ -186,8 +194,10 @@ def run_maze_save_dynamics(adjacency_matrix, initial_quantum_state, sinkerNode, 
 
 if __name__ == "__main__":
     print('quantum_tools has started')
-    myMaze = Maze(maze_size=(10, 5))
+    myMaze = Maze(maze_size=(10, 10))
     quantum_system_size = myMaze.width * myMaze.height + 1
     myQuantumState = ket2dm(basis(quantum_system_size, myMaze.startNode))
-    finalQuantumState, _ = run_maze(myMaze.adjacency, myQuantumState, myMaze.sinkerNode, 0.3, 1000)
+    start_time = time.time()
+    finalQuantumState, _ = run_maze(myMaze.adjacency, myQuantumState, myMaze.sinkerNode, 0.3, 5000)
+    print("Elapsed", time.time()-start_time)
     plot_maze_and_quantumState(myMaze, finalQuantumState)
