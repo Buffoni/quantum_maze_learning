@@ -295,10 +295,8 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
             cax = div.append_axes('right', '5%', '5%')
 
         _maze = copy.deepcopy(self.initial_maze)
-        quantum_state_sequence = [self.initial_quantum_state] + \
-                                 run_maze_save_dynamics(_maze.adjacency, self.initial_quantum_state,
-                                                        _maze.sinkerNode, self.p, self.time_samples,
-                                                        self.sink_rate, quantum_states_saved=frames_per_evolution)[0]
+        quantum_state_sequence = [self.initial_quantum_state]
+
         if mode == 'histogram':
             frames = [np.real(np.diag(qs.full())) for qs in quantum_state_sequence]
         else:
