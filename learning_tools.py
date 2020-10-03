@@ -174,7 +174,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                         mask.add(env.maze.xy2link(nx, ny + 1))
             if sample > eps_threshold:  # choose action from network
                 with torch.no_grad():
-                    masked_tensor = torch.tensor(list(mask))
+                    masked_tensor = torch.tensor(list(mask), dtype=torch.long)
                     a_max = net(state)[0, masked_tensor].max(0)
                     return torch.tensor([[masked_tensor[a_max[1]]]], device=device, dtype=torch.long)
                     # check print(net(state)[0,masked_tensor[a_max[1]]])
@@ -195,7 +195,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                         if ny < env.maze.height:
                             mask.add(env.maze.xy2link(nx, ny + 1))
                 with torch.no_grad():
-                    masked_tensor = torch.tensor(list(mask))
+                    masked_tensor = torch.tensor(list(mask), dtype=torch.long)
                     a_max = net(state)[0, masked_tensor].max(0)
                     return torch.tensor([[masked_tensor[a_max[1]]]], device=device, dtype=torch.long)
             else:  # choose random action from masked ones by population
@@ -284,7 +284,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             evaluate_optimal_action = False
 
         env.reset()
-        state = torch.tensor(env.state, device=device).unsqueeze(0)
+        state = torch.tensor(env.state, device=device, dtype=torch.float32).unsqueeze(0)
         episode_reward = 0
         for t in range(total_actions):
             # Select and perform an action
@@ -296,13 +296,13 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                 action = sequence[t]
 
             next_state, reward, done, _ = env.step(action)
-            # reward = reward.to(device='cpu') #torch.tensor([reward], device=device)
+            # reward = reward.to(device='cpu') #torch.tensor([reward], device=device, dtype=torch.float32)
             episode_reward = reward + gamma * episode_reward
 
             if done:
                 next_state = None
             else:
-                next_state = torch.tensor(next_state, device=device).unsqueeze(0)
+                next_state = torch.tensor(next_state, device=device, dtype=torch.float32).unsqueeze(0)
 
             # Move to the next state
             state = next_state
@@ -319,18 +319,18 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             # Initialize the environment and state
             env.initial_maze.startNode = startNode_tmp
             env.reset()
-            state = torch.tensor(env.state, device=device).unsqueeze(0)
+            state = torch.tensor(env.state, device=device, dtype=torch.float32).unsqueeze(0)
             episode_reward = 0
             for t in range(total_actions):
                 # Select and perform an action
                 action = select_action(state, eps_threshold)
                 next_state, reward, done, _ = env.step(action.item())
-                reward = torch.tensor([reward], device=device)
+                reward = torch.tensor([reward], device=device, dtype=torch.float32)
                 episode_reward = reward + gamma * episode_reward
                 if done:
                     next_state = None
                 else:
-                    next_state = torch.tensor(next_state, device=device).unsqueeze(0)
+                    next_state = torch.tensor(next_state, device=device, dtype=torch.float32).unsqueeze(0)
                 # Store the transition in memory
                 memory.push(state, action, next_state, reward)
                 # Move to the next state
@@ -348,19 +348,19 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             # Initialize the environment and state
             env.initial_maze.startNode = startNode_tmp
             env.reset()
-            state = torch.tensor(env.state, device=device).unsqueeze(0)
+            state = torch.tensor(env.state, device=device, dtype=torch.float32).unsqueeze(0)
             episode_reward = 0
             for t in range(total_actions):
                 # Select and perform an action
                 action = select_action(state, eps_threshold)
                 next_state, reward, done, _ = env.step(action.item())
-                reward = torch.tensor([reward], device=device)
+                reward = torch.tensor([reward], device=device, dtype=torch.float32)
                 episode_reward = reward + gamma * episode_reward
 
                 if done:
                     next_state = None
                 else:
-                    next_state = torch.tensor(next_state, device=device).unsqueeze(0)
+                    next_state = torch.tensor(next_state, device=device, dtype=torch.float32).unsqueeze(0)
 
                 # Store the transition in memory
                 memory.push(state, action, next_state, reward)
@@ -445,7 +445,7 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
 
     for (i, transfer_to_sink) in enumerate(episode_transfer_to_sink):
         # transfer_to_sink_t = torch.cat(transfer_to_sink)
-        transfer_to_sink_t = torch.tensor(transfer_to_sink, dtype=torch.float)
+        transfer_to_sink_t = torch.tensor(transfer_to_sink, dtype=torch.float32)
         transfer_to_sink_len = len(transfer_to_sink_t)
         plt.plot(transfer_to_sink_t.numpy())
         # Take 100 episode averages and plot them too
