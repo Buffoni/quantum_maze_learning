@@ -413,6 +413,29 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                        num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
                        replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink)
 
+        # TODO: include the following into the save_variables function, but I can't find a way to create a dict without
+        #  having to specify the names
+        with open(os.path.join('simulations', save_filename) + '.json', 'w') as f:
+            json.dump({"steps_done": steps_done,
+                       "maze_filename": maze_filename,
+                       "p": p if p < 1 else 1,  # sometimes saves it as int64
+                       "time_samples": int(time_samples),
+                       "total_actions": total_actions,
+                       "num_episodes": num_episodes,
+                       "changeable_links": changeable_links,
+                       "batch_size": batch_size,
+                       "gamma": gamma,
+                       "eps_start": eps_start,
+                       "eps_end": eps_end,
+                       "eps_decay": eps_decay,
+                       "target_update": target_update,
+                       "replay_capacity": replay_capacity,
+                       "reward_no_actions": reward_no_actions,
+                       "reward_final": reward_final,
+                       "optimal_sequence": optimal_sequence,
+                       "target_transfer_to_sink": target_transfer_to_sink,  # at the end since it is really long
+                       "episode_transfer_to_sink": [x.item() for x in episode_transfer_to_sink]  # at the end since it is really long
+                       }, f, indent=4)
     toc = time.time()
     elapsed = toc - tic
 
@@ -427,21 +450,6 @@ def save_variables(filename=None, *args):
 
     with open(filename + '.pkl', 'wb') as f:
         pickle.dump([x.to('cpu') if isinstance(x, torch.Tensor) else x for x in args if not isinstance(x, DQN)], f)
-
-    loc = locals()
-    result_dict = dict([(x, loc[x]) for x in args])
-    for key, value in result_dict.items():
-        if isinstance(value, np.int64):
-            result_dict[key] = int(value)
-        elif isinstance(value, list) and isinstance(value[0], torch.Tensor):
-            result_dict[key] = [x.item() for x in value]
-        elif isinstance(value, DQN):
-            result_dict.pop(key, None)
-        elif isinstance(value, gym.Env):
-            result_dict.pop(key, None)
-
-    with open(filename + '.json', 'w') as f:
-        json.dump(result_dict, f, indent=4)
 
     for x in args:
         if isinstance(x, DQN):
@@ -498,11 +506,11 @@ if __name__ == '__main__':
     training_startNodes = []
     action_selector = 'None'  # None, 'threshold_mask', 'probability_mask'
     diag_threshold = 10 ** (-4)
-    filename, elapsed, reward_final, optimal_sequence = deep_Q_learning_maze(maze_filename='maze_8x8.pkl',
-                                                                             time_samples=100,
-                                                                             num_episodes=25,
+    filename, elapsed, reward_final, optimal_sequence = deep_Q_learning_maze(maze_filename='maze-4x3-1.pkl',
+                                                                             time_samples=10,
+                                                                             num_episodes=10,
                                                                              p=0.3,
-                                                                             total_actions=4,
+                                                                             total_actions=2,
                                                                              training_startNodes=training_startNodes,
                                                                              action_selector=action_selector,
                                                                              diag_threshold=diag_threshold,
