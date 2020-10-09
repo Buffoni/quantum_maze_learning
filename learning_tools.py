@@ -7,6 +7,7 @@ Set of functions implementing reinforcement algorithms on the maze environment
 """
 
 import datetime
+import json
 import math
 import pickle
 import random
@@ -23,6 +24,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from tensorboardX import SummaryWriter
+import json
 
 from gym_quantum_maze.envs import quantum_maze_env
 
@@ -425,6 +427,21 @@ def save_variables(filename=None, *args):
 
     with open(filename + '.pkl', 'wb') as f:
         pickle.dump([x.to('cpu') if isinstance(x, torch.Tensor) else x for x in args if not isinstance(x, DQN)], f)
+
+    loc = locals()
+    result_dict = dict([(x, loc[x]) for x in args])
+    for key, value in result_dict.items():
+        if isinstance(value, np.int64):
+            result_dict[key] = int(value)
+        elif isinstance(value, list) and isinstance(value[0], torch.Tensor):
+            result_dict[key] = [x.item() for x in value]
+        elif isinstance(value, DQN):
+            result_dict.pop(key, None)
+        elif isinstance(value, gym.Env):
+            result_dict.pop(key, None)
+
+    with open(filename + '.json', 'w') as f:
+        json.dump(result_dict, f, indent=4)
 
     for x in args:
         if isinstance(x, DQN):
