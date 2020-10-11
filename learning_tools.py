@@ -104,7 +104,10 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                          eps_decay=1000, target_update=10, replay_capacity=512,
                          save_filename=None, enable_tensorboardX=True, enable_saving=True,
                          startNode=None, sinkerNode=None, training_startNodes=None,
-                         action_selector=None, state_selector=3, diag_threshold=10**(-12), link_update=0.1, action_mode='reverse'):
+                         action_selector=None, state_selector=3, diag_threshold=10**(-12),
+                         link_update=0.1, action_mode='reverse',
+                         saving_folder='simulations', tensorboardX_folder='tensorboardX',
+                         pre_evolution_samples=0, post_evolution_samples=0):
     """Function that performs the deep Q learning.
 
     Reference: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
@@ -122,7 +125,8 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
     env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=startNode, sinkerNode=sinkerNode,
                    p=p, sink_rate=1, time_samples=time_samples, changeable_links=changeable_links,
                    total_actions=total_actions, done_threshold=0.95, link_update=link_update, action_mode=action_mode,
-                   state_selector=state_selector)
+                   state_selector=state_selector,
+                   pre_evolution_samples=pre_evolution_samples, post_evolution_samples=post_evolution_samples)
     if startNode is None:
         startNode = env.initial_maze.startNode
     if sinkerNode is None:
@@ -138,10 +142,13 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
         save_filename = ''.join((today.strftime('%Y-%m-%d_%H-%M-%S_'), codeName, config_options))
 
     if enable_tensorboardX:
-        writer = SummaryWriter(os.path.join('tensorboardX', save_filename))  # tensorboardX writer
+        writer = SummaryWriter(os.path.join(tensorboardX_folder, save_filename))  # tensorboardX writer
 
     # Get number of actions from gym action space
     n_actions = env.action_space.n
+    # Define initial reward
+    env.reset()
+    initial_reward = env.cumulative_reward
 
     # Setup Neural Network
     if action_selector == 'threshold_mask':
@@ -208,7 +215,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
                 population = population/population.sum()  # normalize
                 n = np.random.choice(range(env.quantum_system_size - 1), 1, p=population)
                 nx, ny = env.maze.node2xy(n)
-                available_links = [0] # noAction
+                available_links = [0]  # noAction
                 if nx > 0:
                     available_links.append(1)
                 if nx < env.maze.width:
@@ -249,7 +256,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
         if torch.__version__ < '1.2.0':
             non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=device,
-                                          dtype=torch.uint8) # version on qdab server
+                                          dtype=torch.uint8)  # version on qdab server
         else:
             non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=device,
                                           dtype=torch.bool)  # current version, torch.uint8 is deprecated
@@ -287,7 +294,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
         env.reset()
         state = torch.tensor(env.state, device=device, dtype=torch.float32).unsqueeze(0)
-        episode_reward = 0
+        episode_reward = initial_reward
         for t in range(total_actions):
             # Select and perform an action
             if evaluate_optimal_action:
@@ -322,7 +329,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             env.initial_maze.startNode = startNode_tmp
             env.reset()
             state = torch.tensor(env.state, device=device, dtype=torch.float32).unsqueeze(0)
-            episode_reward = 0
+            episode_reward = initial_reward
             for t in range(total_actions):
                 # Select and perform an action
                 action = select_action(state, eps_threshold)
@@ -351,7 +358,7 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
             env.initial_maze.startNode = startNode_tmp
             env.reset()
             state = torch.tensor(env.state, device=device, dtype=torch.float32).unsqueeze(0)
-            episode_reward = 0
+            episode_reward = initial_reward
             for t in range(total_actions):
                 # Select and perform an action
                 action = select_action(state, eps_threshold)
@@ -407,19 +414,24 @@ def deep_Q_learning_maze(maze_filename=None, p=0.1, time_samples=100, total_acti
 
     # Save variables:
     if enable_saving:
-        save_variables(os.path.join('simulations', save_filename),
+        save_variables(os.path.join(saving_folder, save_filename),
                        episode_transfer_to_sink, env, steps_done, policy_net, maze_filename, p, time_samples,
                        total_actions,
                        num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
-                       replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink)
+                       replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink,
+                       saving_folder, tensorboardX_folder, pre_evolution_samples, post_evolution_samples)
 
         # TODO: include the following into the save_variables function, but I can't find a way to create a dict without
         #  having to specify the names
-        with open(os.path.join('simulations', save_filename) + '.json', 'w') as f:
+        with open(os.path.join(saving_folder, save_filename) + '.json', 'w') as f:
             json.dump({"steps_done": steps_done,
+                       "saving_folder": saving_folder,
+                       "tensorboardX_folder": tensorboardX_folder,
                        "maze_filename": maze_filename,
                        "p": p if p < 1 else 1,  # sometimes saves it as int64
                        "time_samples": int(time_samples),
+                       "pre_evolution_samples": pre_evolution_samples,
+                       "post_evolution_samples": post_evolution_samples,
                        "total_actions": total_actions,
                        "num_episodes": num_episodes,
                        "changeable_links": changeable_links,
@@ -506,27 +518,37 @@ if __name__ == '__main__':
     training_startNodes = []
     action_selector = 'None'  # None, 'threshold_mask', 'probability_mask'
     diag_threshold = 10 ** (-4)
+    saving_folder = os.path.join(os.getcwd(), 'simulations', 'test')
     filename, elapsed, reward_final, optimal_sequence = deep_Q_learning_maze(maze_filename='maze-4x3-1.pkl',
-                                                                             time_samples=10,
+                                                                             time_samples=200,
                                                                              num_episodes=10,
                                                                              p=0.3,
-                                                                             total_actions=2,
+                                                                             total_actions=4,
                                                                              training_startNodes=training_startNodes,
                                                                              action_selector=action_selector,
                                                                              diag_threshold=diag_threshold,
                                                                              link_update=0.1,
                                                                              action_mode='reverse',  # 'reverse', 'sum', 'subtract',
                                                                              state_selector=3,
+                                                                             saving_folder=saving_folder,
+                                                                             tensorboardX_folder='tensorboardX',
+                                                                             pre_evolution_samples=0,
+                                                                             post_evolution_samples=0
                                                                              )
-    print('Variables saved in', ''.join((filename, '.pkl')))
-    print('Trained model saved in', ''.join((filename, '_policy_net', '.pt')))
+    print('Final reward', reward_final)
+    print('Variables saved in', filename + '.pkl')
+    print('Trained model saved in', filename + '_policy_net.pt')
     print("Elapsed time", elapsed, "sec.\n")
 
     #This section prints one training
-    with open(os.path.join('simulations', filename + '.pkl'), 'rb') as f:
+    with open(os.path.join(saving_folder, filename + '.pkl'), 'rb') as f:
         [episode_transfer_to_sink, env, steps_done, maze_filename, p, time_samples, total_actions,
          num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
-         replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink] = pickle.load(f)
+         replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink,
+         saving_folder, tensorboardX_folder, pre_training_samples, post_training_samples] = pickle.load(f)
+        # [episode_transfer_to_sink, env, steps_done, maze_filename, p, time_samples, total_actions,
+        #  num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
+        #  replay_capacity, reward_no_actions, reward_final, optimal_sequence, target_transfer_to_sink] = pickle.load(f)
     # # with open(os.path.join('data', 'deep_Q_learning_maze_ST1_A8_T5000_P00_E2000_(2)' + '.pkl'), 'rb') as f:
     # #     [episode_transfer_to_sink, steps_done, maze_filename, p, time_samples, total_actions,
     # #      num_episodes, changeable_links, batch_size, gamma, eps_start, eps_end, eps_decay, target_update,
@@ -555,7 +577,7 @@ if __name__ == '__main__':
                    )
 
     # load test
-    fileToLoad = os.path.join('simulations', filename + '_policy_net.pt')
+    fileToLoad = os.path.join(saving_folder, filename + '_policy_net.pt')
     env = gym.make('quantum-maze-v0', maze_filename=maze_filename, startNode=None, sinkerNode=None,
                    p=p, sink_rate=1, time_samples=time_samples, changeable_links=None,
                    total_actions=total_actions, done_threshold=0.95)
