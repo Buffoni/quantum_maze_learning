@@ -36,7 +36,7 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
 
     def __init__(self, maze_size=(10, 5), startNode=0, sinkerNode=None, p=0.1, sink_rate=1, time_samples=100,
                  changeable_links=None, total_actions=8, done_threshold=0.95, maze_filename=None, link_update=0.1,
-                 action_mode=None, state_selector=3, dt=1e-2):
+                 action_mode=None, state_selector=3, dt=1e-2, pre_evolution_samples=0, post_evolution_samples=0):
         # action_mode = 'reverse', 'sum', 'subtract'
         # evolution parameters
         self.state_selector = state_selector
@@ -44,6 +44,8 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
         self.sink_rate = sink_rate
         self.p = p
         self.dt = dt
+        self.pre_evolution_samples = pre_evolution_samples
+        self.post_evoltion_samples = post_evolution_samples
 
         if maze_filename is None:
             self.initial_maze = Maze(maze_size=maze_size, startNode=startNode, sinkerNode=sinkerNode)
@@ -57,7 +59,19 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
                 self.initial_maze.sinkerNode = sinkerNode
 
         self.quantum_system_size = self.initial_maze.total_nodes + 1  # +1 for the sink
-        self.initial_quantum_state = ket2dm(basis(self.quantum_system_size, self.initial_maze.startNode))
+        self.sinkNode = self.quantum_system_size - 1
+
+        # define initial_quantum_state taking into account pre_evolution_samples
+        if self.pre_evolution_samples == 0:
+            self.initial_quantum_state = ket2dm(basis(self.quantum_system_size, self.initial_maze.startNode))
+            self.cumulative_reward = 0
+        else:
+            self.initial_quantum_state, _ = run_maze(ket2dm(basis(self.quantum_system_size, self.initial_maze.startNode)),
+                                                     self.quantum_state, self.initial_maze.sinkerNode,
+                                                     self.p, self.time_samples, self.sink_rate, self.dt)
+
+            # initial cumulative reward
+            self.cumulative_reward = np.real(self.initial_quantum_state.full()[self.sinkNode, self.sinkNode])
 
         if changeable_links is not None:
             self.changeable_links = changeable_links
@@ -148,6 +162,7 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
         self.quantum_state = copy.deepcopy(self.initial_quantum_state)
         self.maze = copy.deepcopy(self.initial_maze)
         self.actions_taken = 0
+        self.cumulative_reward = np.real(self.initial_quantum_state.full()[self.sinkNode, self.sinkNode])
         return self.state
 
     def do_action(self, action: int, _maze=None):
@@ -200,12 +215,21 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
         # update number of actions
         self.actions_taken += 1
 
-        new_quantum_state, _ = run_maze(self.maze.adjacency, self.quantum_state,
-                                        self.initial_maze.sinkerNode, self.p, self.time_samples, self.sink_rate, self.dt)
+        if self.actions_taken < self.total_actions:
+            new_quantum_state, _ = run_maze(self.maze.adjacency, self.quantum_state,
+                                            self.initial_maze.sinkerNode, self.p,
+                                            self.time_samples,
+                                            self.sink_rate, self.dt)
+        else:
+            # evaluate post_evolution time interval after last action
+            new_quantum_state, _ = run_maze(self.maze.adjacency, self.quantum_state,
+                                            self.initial_maze.sinkerNode, self.p,
+                                            self.time_samples + self.post_evoltion_samples,
+                                            self.sink_rate, self.dt)
 
         # reward defined as how much gets to the sink in the current state transition
-        sink = self.quantum_system_size - 1
-        reward = np.real(new_quantum_state.full()[sink, sink]) - np.real(self.quantum_state.full()[sink, sink])
+        reward = np.real(new_quantum_state.full()[self.sinkNode, self.sinkNode]) - self.cumulative_reward
+        self.cumulative_reward += np.real(new_quantum_state.full()[self.sinkNode, self.sinkNode])
 
         # update quantum state
         self.quantum_state = new_quantum_state
