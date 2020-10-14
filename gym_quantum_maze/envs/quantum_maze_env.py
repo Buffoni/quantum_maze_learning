@@ -229,7 +229,8 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
 
         # reward defined as how much gets to the sink in the current state transition
         reward = np.real(new_quantum_state.full()[self.sinkNode, self.sinkNode]) - self.cumulative_reward
-        self.cumulative_reward += np.real(new_quantum_state.full()[self.sinkNode, self.sinkNode])
+        self.cumulative_reward = np.real(new_quantum_state.full()[self.sinkNode, self.sinkNode])
+        # or self.cumulative_reward += reward
 
         # update quantum state
         self.quantum_state = new_quantum_state
