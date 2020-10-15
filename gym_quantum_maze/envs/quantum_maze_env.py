@@ -66,8 +66,9 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
             self.initial_quantum_state = ket2dm(basis(self.quantum_system_size, self.initial_maze.startNode))
             self.cumulative_reward = 0
         else:
-            self.initial_quantum_state, _ = run_maze(ket2dm(basis(self.quantum_system_size, self.initial_maze.startNode)),
-                                                     self.quantum_state, self.initial_maze.sinkerNode,
+            self.initial_quantum_state, _ = run_maze(self.initial_maze.adjacency,
+                                                     ket2dm(basis(self.quantum_system_size, self.initial_maze.startNode)),
+                                                     self.initial_maze.sinkerNode,
                                                      self.p, self.time_samples, self.sink_rate, self.dt)
 
             # initial cumulative reward
@@ -375,7 +376,8 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
 
 if __name__ == '__main__':
     print('quantum_maze_env has started')
-    env = QuantumMazeEnv(maze_size=(5, 5), time_samples=300, link_update=0.3, action_mode='reverse')
+    env = QuantumMazeEnv(maze_size=(5, 5), time_samples=300, link_update=0.3, action_mode='reverse',
+                         pre_evolution_samples=10, post_evolution_samples=10)
     env.reset()
     plt.figure()
     env.render()
