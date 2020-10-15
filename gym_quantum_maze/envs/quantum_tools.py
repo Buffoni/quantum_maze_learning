@@ -74,15 +74,17 @@ def run_maze(adjacency_matrix, initial_quantum_state, sinkerNode, p, timeSamples
 
         except Exception as ecc:
             # TODO: differenciate Exceptions, here it is consider that the ecception is related by nsteps
-            if nsteps < 5000:
-                nsteps += 1000
+            if nsteps < 10000:
+                # nsteps += 1000
+                nsteps *= 2
             else:
+                print("nsteps:", nsteps)
                 print(ecc.args[0])
                 raise
             # if it prints
             # UserWarning: zvode: Excess work done on this call. (Perhaps wrong MF.)
             #   self.messages.get(istate, unexpected_istate_msg)))
-            # the time interval is too big
+            # the time interval is too big or nsteps is too small
 
     end = time.time()
 
@@ -210,12 +212,20 @@ def run_maze_save_dynamics(adjacency_matrix, initial_quantum_state, sinkerNode, 
 
 if __name__ == "__main__":
     print('quantum_tools has started')
-    # myMaze = Maze(maze_size=(10, 10))
-    myMaze = Maze().load("maze_8x8.pkl")
+    myMaze = Maze(maze_size=(10, 10))
+    # myMaze = Maze().load("myMaze.pkl")
     quantum_system_size = myMaze.width * myMaze.height + 1
     myQuantumState = ket2dm(basis(quantum_system_size, myMaze.startNode))
     start_time = time.time()
-    finalQuantumState, _ = run_maze(myMaze.adjacency, myQuantumState, myMaze.sinkerNode, 0.3, 40000)
+    p = 0.3
+    # pre
+    finalQuantumState, _ = run_maze(myMaze.adjacency, myQuantumState, myMaze.sinkerNode, p, 20000)
+    # actions
+    for k in range(8):
+        finalQuantumState, _ = run_maze(myMaze.adjacency, finalQuantumState, myMaze.sinkerNode, p, 3000)
+    # post
+    finalQuantumState, _ = run_maze(myMaze.adjacency, finalQuantumState, myMaze.sinkerNode, p, 20000)
+
     print("Sink population", finalQuantumState.data.diagonal()[-1])
     print("Elapsed", time.time()-start_time)
     plot_maze_and_quantumState(myMaze, finalQuantumState)
