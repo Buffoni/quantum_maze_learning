@@ -35,7 +35,7 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
     }
 
     def __init__(self, maze_size=(10, 5), startNode=0, sinkerNode=None, p=0.1, sink_rate=1, time_samples=100,
-                 changeable_links=None, total_actions=8, done_threshold=0.95, maze_filename=None, link_update=0.1,
+                 changeable_links=None, total_actions=8, done_threshold=1.0, maze_filename=None, link_update=0.1,
                  action_mode=None, state_selector=3, dt=1e-2, pre_evolution_samples=0, post_evolution_samples=0):
         # action_mode = 'reverse', 'sum', 'subtract'
         # evolution parameters
