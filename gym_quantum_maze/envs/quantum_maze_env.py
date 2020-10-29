@@ -69,7 +69,7 @@ class QuantumMazeEnv(gym.Env, utils.EzPickle):
             self.initial_quantum_state, _ = run_maze(self.initial_maze.adjacency,
                                                      ket2dm(basis(self.quantum_system_size, self.initial_maze.startNode)),
                                                      self.initial_maze.sinkerNode,
-                                                     self.p, self.time_samples, self.sink_rate, self.dt)
+                                                     self.p, self.pre_evolution_samples, self.sink_rate, self.dt)
 
             # initial cumulative reward
             self.cumulative_reward = np.real(self.initial_quantum_state.full()[self.sinkNode, self.sinkNode])
