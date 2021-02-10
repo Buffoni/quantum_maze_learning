@@ -470,7 +470,7 @@ def save_variables(filename=None, *args):
     return filename
 
 
-def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], legend_labels=[]):
+def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], legend_labels=[], mean_window=100):
     plt.figure(dpi=300)
     plt.clf()
     plt.title(title)
@@ -485,15 +485,14 @@ def plot_durations(episode_transfer_to_sink, title='Training...', constants=[], 
         transfer_to_sink_t = torch.tensor(transfer_to_sink, dtype=torch.float32)
         transfer_to_sink_len = len(transfer_to_sink_t)
         plt.plot(transfer_to_sink_t.numpy())
-        # Take 100 episode averages and plot them too
-        if transfer_to_sink_len >= 100:
-            means = transfer_to_sink_t.unfold(0, 100, 1).mean(1).view(-1)
-            means = torch.cat((torch.zeros(99), means))
+        if transfer_to_sink_len >= mean_window:
+            means = transfer_to_sink_t.unfold(0, mean_window, 1).mean(1).view(-1)
+            means = torch.cat((torch.zeros(mean_window-1), means))
             plt.plot(means.numpy())
             if generate_training_labels:
-                training_legend_labels.extend(['training-' + str(i), 'mean 100-' + str(i)])
+                training_legend_labels.extend(['training-' + str(i), 'mean ' + str(mean_window) + '-' + str(i)])
             else:
-                training_legend_labels.extend([legend_labels[i], legend_labels[i] + ' mean 100'])
+                training_legend_labels.extend([legend_labels[i], legend_labels[i] + ' mean ' + str(mean_window)])
 
         else:
             if generate_training_labels:
